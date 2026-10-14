@@ -89,6 +89,7 @@ const nodeSchema = z.object({
   title: z.string().trim().min(1).max(100),
   estimateMinutes: z.number().finite().nonnegative(),
   notes: z.string(),
+  notesFile: z.string().optional(),
   finishedAt: timestamp.optional(),
   linkedTreeId: z.string().min(1).optional(),
   filled: z.boolean().optional(),

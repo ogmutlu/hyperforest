@@ -145,15 +145,15 @@ export class Workspace {
     this.state = state;
     this.notify();
   };
-  commit(action: Action, now: number): void {
+  commit(action: Action, now: number): void | Promise<void> {
     this.refresh();
     this.write(apply(this.state, action, now));
   }
-  replace(raw: string): void {
+  replace(raw: string): void | Promise<void> {
     this.refresh();
     this.write(stateSchema.parse(JSON.parse(raw) as unknown));
   }
-  clear(): void {
+  clear(): void | Promise<void> {
     this.refresh();
     this.storage.removeItem(LEGACY_STORAGE_KEY);
     this.write({ version: 1, trees: [], nodes: [], sessions: [], focus: null });
@@ -167,7 +167,9 @@ export class Workspace {
     this.notify();
   }
 }
-export async function transact(work: () => void): Promise<void> {
+export async function transact(
+  work: () => void | Promise<void>,
+): Promise<void> {
   if ("locks" in navigator) await navigator.locks.request(STORAGE_KEY, work);
-  else work();
+  else await work();
 }

@@ -202,3 +202,7 @@ Today uses compact `hms` duration formatting, for example `1h2m3s`. In **Session
 history** to add a session with a subject, local start time, and duration, or to
 delete an existing session with confirmation. Manual sessions update counters
 and are included in backups. Deleting a saved session leaves active focus intact.
+
+A Linux desktop version shares this interface and saves YAML and actual Markdown
+files in a selectable directory, with daily backups. See [DESKTOP.md](DESKTOP.md)
+for building, installing, storage, and backup details.

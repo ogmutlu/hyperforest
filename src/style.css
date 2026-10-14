@@ -2033,3 +2033,33 @@ button:disabled {
 .option-info-control > button:focus-visible + .option-info-popup {
   display: block;
 }
+
+.desktop-storage {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 24px;
+  border-bottom: 1px solid var(--line);
+  flex-wrap: wrap;
+}
+.desktop-storage > span {
+  flex: 1;
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+.desktop-storage small {
+  color: var(--muted);
+}
+.desktop-error {
+  padding: 12px 24px;
+  color: #dd9689;
+}
+
+.interface-zoom {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+.interface-zoom button {
+  min-width: 28px;
+}

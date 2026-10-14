@@ -1,0 +1,97 @@
+# hyperforest on Linux
+
+The desktop app uses the same React/TypeScript interface and domain logic as the
+web app. Tauri supplies the native window, directory picker, and filesystem layer.
+
+## Run or install
+
+Build an installable Debian package:
+
+```sh
+npm ci
+npm run desktop:build -- --bundles deb
+sudo apt install ./src-tauri/target/release/bundle/deb/hyperforest_0.1.0_amd64.deb
+```
+
+Launch **hyperforest** from your application menu, or run
+`src-tauri/target/release/hyperforest-desktop` directly after building. For development:
+
+```sh
+npm run desktop:dev
+```
+
+Building requires Rust, Node.js, and Linux development libraries:
+
+```sh
+sudo apt install libwebkit2gtk-4.1-dev libgtk-3-dev libssl-dev librsvg2-dev patchelf
+```
+
+The Debian package uses the system WebKitGTK runtime. An AppImage target is also
+configured (`npm run desktop:build -- --bundles appimage`).
+
+## Select the data directory
+
+On first launch choose a directory. **Change directory** is always available
+above the interface. An existing `workspace.yaml` opens that workspace. An empty
+directory receives the current workspace when changing directories; the old
+directory stays intact. Browser data is separate: use **Export** on the website,
+then **Import** in the desktop app to transfer it.
+
+```text
+chosen-directory/
+  workspace.yaml          # complete workspace metadata, including active focus
+  structure.yaml          # readable hierarchy and cumulative focus times
+  notes/
+    Hypertree - Vertex --identifier.md
+  backups/
+    YYYY-MM-DD/
+      workspace.yaml
+      structure.yaml
+      notes/
+```
+
+Markdown contents live in the files, rather than inside `workspace.yaml`.
+`notesFile` connects each vertex to its file. Names stay stable after renaming a
+vertex; a short identifier prevents collisions when names are reused. The regular
+in-app notes editor remains available; **Open Markdown file** opens the actual
+file in your system's default editor.
+
+Edits save immediately before the interface reports success. Autosave also runs
+every 30 seconds, incorporating external Markdown edits. Files are written
+atomically, and a directory lock prevents two desktop instances from writing the
+same workspace. Conflicting edits produce an error instead of overwriting notes.
+Changing `workspace.yaml` externally requires restarting the app before saving.
+Do not edit metadata and notes concurrently in the app and another editor.
+
+Deleted vertices' Markdown files remain on disk for recovery. **Clear local data**
+clears the current YAML workspace; notes and backups remain. Finished vertices,
+their notes, and their history remain part of the workspace.
+
+## Daily backups
+
+The app maintains one complete snapshot per local calendar day, updating today's
+snapshot on every save and retaining the latest 30 daily snapshots. All Markdown
+files in `notes/`, including retained files, are backed up.
+
+Choosing or reopening a data directory enables the user service
+`hyperforest-backup.timer`. It invokes `hyperforest-desktop --backup-only`, so
+backups also run when the window is closed. It follows the currently selected
+directory. The timer requires a systemd user session; missed runs are caught on
+the next login. If enabling it fails, the app displays an error and continues
+making backups while open.
+
+```sh
+systemctl --user status hyperforest-backup.timer
+systemctl --user list-timers hyperforest-backup.timer
+```
+
+The remembered directory is stored in
+`~/.config/io.github.ogmutlu.hyperforest/data-directory` (or under `XDG_CONFIG_HOME`).
+Restore a snapshot by selecting its dated directory, or copy it to a new directory
+and select that copy. Keep important backups on another disk as well.
+
+Checks: `npm test`, `npm run test:e2e`, and `npm run desktop:test`.
+
+Use the − / percentage / + controls above the app to zoom the entire interface.
+Keyboard shortcuts are Ctrl+plus, Ctrl+minus, and Ctrl+0 to reset. Ctrl+scroll on
+menus also changes interface zoom; Ctrl+scroll over the graph changes its camera.

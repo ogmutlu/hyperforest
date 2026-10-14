@@ -22,6 +22,7 @@ import {
   filterSessions,
 } from "./domain";
 import type { Action, GoalNode, State } from "./domain";
+import { DesktopWorkspace } from "./desktop";
 import { exportArchive, archiveBackup } from "./export";
 import { Graph, nodeColor } from "./Graph";
 import { Icon } from "./icons";
@@ -228,7 +229,9 @@ function EditDialog({
   close,
   run,
   editing,
+  openFile,
 }: {
+  openFile?: (() => Promise<void>) | undefined;
   editing: boolean;
   state: State;
   node: GoalNode;
@@ -240,23 +243,22 @@ function EditDialog({
   const [estimate, setEstimate] = useState(String(node.estimateMinutes || ""));
   const [notes, setNotes] = useState(node.notes);
   const tree = state.trees.find((item) => item.id === node.treeId);
+  const save = (): Promise<boolean> =>
+    run({
+      type: "edit",
+      id: original.current.id,
+      expected: {
+        title: original.current.title,
+        notes: original.current.notes,
+        estimateMinutes: original.current.estimateMinutes,
+      },
+      title,
+      estimateMinutes: Number(estimate),
+      notes,
+    });
   const submit = async (event: FormEvent): Promise<void> => {
     event.preventDefault();
-    if (
-      await run({
-        type: "edit",
-        id: original.current.id,
-        expected: {
-          title: original.current.title,
-          notes: original.current.notes,
-          estimateMinutes: original.current.estimateMinutes,
-        },
-        title,
-        estimateMinutes: Number(estimate),
-        notes,
-      })
-    )
-      close();
+    if (await save()) close();
   };
   const filename =
     `${tree?.title ?? "Hypertree"}${node.id === node.treeId ? "" : ` - ${title}`}.md`.replaceAll(
@@ -308,6 +310,24 @@ function EditDialog({
           />
         </label>
         <div className="dialog-actions">
+          {openFile && (
+            <button
+              type="button"
+              className="quiet-button"
+              onClick={() => {
+                void save()
+                  .then(async (success) => {
+                    if (success) {
+                      await openFile();
+                      close();
+                    }
+                  })
+                  .catch(() => {});
+              }}
+            >
+              Open Markdown file
+            </button>
+          )}
           <button
             type="button"
             className="quiet-button"
@@ -548,7 +568,10 @@ export function App({ workspace }: { workspace: Workspace }) {
             </button>
             <div className="saved-controls">
               <span className="saved-state" role="status" tabIndex={0}>
-                <i /> Saved on this device
+                <i />{" "}
+                {workspace instanceof DesktopWorkspace
+                  ? "Saved in data directory"
+                  : "Saved on this device"}
               </span>
               <div className="saved-menu">
                 <button
@@ -1314,6 +1337,18 @@ export function App({ workspace }: { workspace: Workspace }) {
             editing={editing}
             close={() => setDialog(null)}
             run={run}
+            openFile={
+              workspace instanceof DesktopWorkspace
+                ? async () => {
+                    try {
+                      await workspace.openNote(node.id);
+                    } catch (reason: unknown) {
+                      setError(String(reason));
+                      throw reason;
+                    }
+                  }
+                : undefined
+            }
           />
         )}
         {dialog === "complete" && node && node.id !== node.treeId && (
@@ -1399,9 +1434,10 @@ export function App({ workspace }: { workspace: Workspace }) {
           <Dialog close={() => setDialog(null)} label="Clear local data">
             <h2>Clear everything on this device?</h2>
             <p>
-              This permanently deletes all hypertrees, vertices, notes, saved
-              sessions, and any active focus session from this browser. Export a
-              backup first if you want to keep your work.
+              {workspace instanceof DesktopWorkspace
+                ? "This clears the current workspace in your data directory. Markdown files and daily backups remain available for recovery."
+                : "This permanently deletes all hypertrees, vertices, notes, saved sessions, and any active focus session from this browser."}{" "}
+              Export a backup first if you want to keep your work.
             </p>
             <div className="dialog-actions">
               <button

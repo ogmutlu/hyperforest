@@ -1289,3 +1289,131 @@ test("pedantic and finished show separate explanations only on hover or keyboard
   await page.getByRole("heading", { name: "Options", exact: true }).hover();
   await expect(page.locator("#finished-explanation")).toBeHidden();
 });
+
+test("desktop uses selected YAML and Markdown storage rather than browser workspace data", async ({
+  page,
+}) => {
+  await page.addInitScript(() => {
+    Object.assign(window, {
+      isTauri: true,
+      __TAURI_INTERNALS__: {
+        metadata: {
+          currentWebview: { label: "main" },
+          currentWindow: { label: "main" },
+        },
+        invoke: async (
+          command: string,
+          args: {
+            directory?: string;
+            request?: { yaml: string; notes: Record<string, string> };
+            value?: number;
+          },
+        ) => {
+          const key = "test.desktop.files";
+          if (command === "plugin:webview|set_webview_zoom") {
+            localStorage.setItem("test.zoom", String(args.value));
+            return null;
+          }
+          if (command === "desktop_load")
+            return JSON.parse(localStorage.getItem(key) ?? "null");
+          if (command === "plugin:dialog|open")
+            return "/tmp/hyperforest-desktop-test";
+          if (command === "desktop_select")
+            return { directory: args.directory, yaml: null, notes: {} };
+          if (command === "desktop_save") {
+            if (args.directory !== "/tmp/hyperforest-desktop-test")
+              throw new Error("desktop_save requires the selected directory");
+            const loaded = {
+              directory: "/tmp/hyperforest-desktop-test",
+              yaml: args.request!.yaml,
+              notes: args.request!.notes,
+            };
+            localStorage.setItem(key, JSON.stringify(loaded));
+            return loaded;
+          }
+          if (command === "desktop_enable_backups") return null;
+          if (command === "desktop_open_note") {
+            localStorage.setItem("test.opened-note", "yes");
+            return null;
+          }
+          throw new Error(`Unexpected command ${command}`);
+        },
+      },
+    });
+  });
+  await page.goto("./");
+  await page
+    .getByRole("button", { name: "Zoom interface in", exact: true })
+    .click();
+  await expect
+    .poll(() => page.evaluate(() => localStorage.getItem("test.zoom")))
+    .toBe("1.1");
+  await page.keyboard.press("Control+-");
+  await expect
+    .poll(() => page.evaluate(() => localStorage.getItem("test.zoom")))
+    .toBe("1");
+  await page.keyboard.press("Control+=");
+  await expect
+    .poll(() => page.evaluate(() => localStorage.getItem("test.zoom")))
+    .toBe("1.1");
+  await page.keyboard.press("Control+0");
+  await expect
+    .poll(() => page.evaluate(() => localStorage.getItem("test.zoom")))
+    .toBe("1");
+  await page
+    .getByRole("button", { name: "Choose directory", exact: true })
+    .click();
+  await expect(
+    page.getByText("Data directory: /tmp/hyperforest-desktop-test", {
+      exact: true,
+    }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Select Test project", exact: true }),
+  ).toHaveCount(0);
+  await page
+    .getByRole("button", { name: "New hypertree", exact: true })
+    .click();
+  await page
+    .getByLabel("Hypertree name", { exact: true })
+    .fill("Desktop project");
+  await page
+    .getByRole("button", { name: "Create hypertree", exact: true })
+    .click();
+  await page.getByRole("button", { name: "Edit goal", exact: true }).click();
+  await page
+    .getByLabel("Markdown notes", { exact: true })
+    .fill("# Actual Markdown\nSaved separately.");
+  await page.getByRole("button", { name: "Save changes", exact: true }).click();
+  await expect(
+    page.getByRole("dialog", { name: "Edit goal and notes", exact: true }),
+  ).toHaveCount(0);
+  const files = await page.evaluate(() =>
+    JSON.parse(localStorage.getItem("test.desktop.files")!),
+  );
+  expect(files.yaml).toContain("notesFile:");
+  expect(files.yaml).not.toContain("Saved separately.");
+  expect(Object.values(files.notes)).toContain(
+    "# Actual Markdown\nSaved separately.",
+  );
+  await page.reload();
+  await expect(
+    page.getByRole("button", { name: "Select Desktop project", exact: true }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "Edit goal", exact: true }).click();
+  await page
+    .getByLabel("Markdown notes", { exact: true })
+    .fill("# Draft saved before opening");
+  await page
+    .getByRole("button", { name: "Open Markdown file", exact: true })
+    .click();
+  await expect
+    .poll(() => page.evaluate(() => localStorage.getItem("test.opened-note")))
+    .toBe("yes");
+  const reopened = await page.evaluate(() =>
+    JSON.parse(localStorage.getItem("test.desktop.files")!),
+  );
+  expect(Object.values(reopened.notes)).toContain(
+    "# Draft saved before opening",
+  );
+});
