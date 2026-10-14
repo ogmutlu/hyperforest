@@ -1944,3 +1944,23 @@ button:disabled {
 .top-actions .saved-menu > button {
   font-size: 12px;
 }
+
+.inspector-actions {
+  grid-template-columns: 100px 104px 32px;
+}
+.graph-options-controls {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 16px;
+  margin: 20px 0;
+}
+.graph-options-controls .pedantic-control {
+  margin: 0;
+  width: 100%;
+}
+.graph-options-controls .pedantic-tooltip {
+  position: static;
+  width: auto;
+  margin-top: 12px;
+}

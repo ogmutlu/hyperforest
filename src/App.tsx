@@ -16,6 +16,7 @@ import {
   formatHms,
   shortTime,
   subtreeIds,
+  nodePath,
   totals,
   todayTime,
   filterSessions,
@@ -344,11 +345,13 @@ export function App({ workspace }: { workspace: Workspace }) {
     | "delete"
     | "complete"
     | "tabs"
+    | "options"
     | "history"
     | "clear"
     | null
   >(null);
   const [editing, setEditing] = useState(false);
+  const [newParent, setNewParent] = useState("");
   const [newName, setNewName] = useState("");
   const [linkedTreeId, setLinkedTreeId] = useState("");
   const [historyFrom, setHistoryFrom] = useState("");
@@ -471,7 +474,7 @@ export function App({ workspace }: { workspace: Workspace }) {
       (await run({
         type: "add",
         id,
-        parentId: node.id,
+        parentId: newParent || node.id,
         title: newName,
         ...(linkedTreeId ? { linkedTreeId } : {}),
       }))
@@ -696,47 +699,7 @@ export function App({ workspace }: { workspace: Workspace }) {
                 >
                   Vertex color
                 </button>
-                <label className="connection-select">
-                  Parent
-                  <select
-                    aria-label="Parent connection"
-                    disabled={
-                      busy ||
-                      !editing ||
-                      node.id === node.treeId ||
-                      node.finishedAt !== undefined
-                    }
-                    value={node.parentId ?? ""}
-                    onChange={(event) => {
-                      void run({
-                        type: "connect",
-                        id: node.id,
-                        parentId: event.target.value || null,
-                      });
-                    }}
-                  >
-                    <option
-                      value=""
-                      disabled={
-                        node.id !== node.treeId && Boolean(tree.pedantic)
-                      }
-                    >
-                      {node.id === node.treeId ? "Root" : "Disconnected"}
-                    </option>
-                    {state.nodes
-                      .filter(
-                        (item) =>
-                          item.treeId === node.treeId &&
-                          item.finishedAt === undefined &&
-                          !subtreeIds(state, node.id).has(item.id),
-                      )
-                      .map((item) => (
-                        <option key={item.id} value={item.id}>
-                          {item.title}
-                        </option>
-                      ))}
-                  </select>
-                </label>
+
                 <button
                   className="quiet-button"
                   disabled={
@@ -778,70 +741,17 @@ export function App({ workspace }: { workspace: Workspace }) {
                   onClick={() => {
                     setNewName("");
                     setLinkedTreeId("");
+                    setNewParent(node.id);
                     setDialog("child");
                   }}
                 >
                   <Icon name="plus" /> New vertex
                 </button>
-                <div className="pedantic-control">
-                  <button
-                    className="quiet-button pedantic-toggle"
-                    role="switch"
-                    aria-label="pedantic"
-                    aria-checked={tree.pedantic ?? false}
-                    aria-describedby="pedantic-definition"
-                    disabled={busy}
-                    onClick={() => {
-                      void run({
-                        type: "pedantic",
-                        treeId: tree.id,
-                        enabled: !tree.pedantic,
-                      });
-                    }}
-                  >
-                    <span className="toggle-track" aria-hidden="true">
-                      <i />
-                    </span>
-                    pedantic
-                  </button>
-                  <div
-                    id="pedantic-definition"
-                    role="tooltip"
-                    className="pedantic-tooltip"
-                  >
-                    <p>
-                      A hypertree is a hypergraph with a host tree in which each
-                      hyperedge is the vertex set of a connected subtree. Each
-                      graph here represents one hypertree; the collection of
-                      separate hypertrees forms a hyperforest.
-                    </p>
-                    <p>
-                      Here, each vertex color defines a hyperedge, including the
-                      initially assigned colors. Pedantic requires the whole
-                      graph to be connected, and all vertices with the same
-                      color to form one connected subtree. New hypertrees have
-                      pedantic disabled by default.
-                    </p>
-                  </div>
-                </div>
                 <button
-                  className="quiet-button pedantic-toggle finished-toggle"
-                  role="switch"
-                  aria-label="finished"
-                  aria-checked={tree.showFinished ?? false}
-                  disabled={busy}
-                  onClick={() => {
-                    void run({
-                      type: "showFinished",
-                      treeId: tree.id,
-                      enabled: !tree.showFinished,
-                    });
-                  }}
+                  className="quiet-button"
+                  onClick={() => setDialog("options")}
                 >
-                  <span className="toggle-track" aria-hidden="true">
-                    <i />
-                  </span>
-                  finished
+                  Options
                 </button>
               </div>
 
@@ -1009,6 +919,76 @@ export function App({ workspace }: { workspace: Workspace }) {
             )}
           </>
         )}
+        {dialog === "options" && tree && (
+          <Dialog close={() => setDialog(null)} label="Graph options">
+            <h2>Options</h2>
+            <div className="graph-options-controls">
+              <div className="pedantic-control">
+                <button
+                  className="quiet-button pedantic-toggle"
+                  role="switch"
+                  aria-label="pedantic"
+                  aria-checked={tree.pedantic ?? false}
+                  aria-describedby="pedantic-definition"
+                  disabled={busy}
+                  onClick={() => {
+                    void run({
+                      type: "pedantic",
+                      treeId: tree.id,
+                      enabled: !tree.pedantic,
+                    });
+                  }}
+                >
+                  <span className="toggle-track" aria-hidden="true">
+                    <i />
+                  </span>
+                  pedantic
+                </button>
+                <div
+                  id="pedantic-definition"
+                  role="tooltip"
+                  className="pedantic-tooltip"
+                >
+                  <p>
+                    A hypertree is a hypergraph with a host tree in which each
+                    hyperedge is the vertex set of a connected subtree. Each
+                    graph here represents one hypertree; the collection of
+                    separate hypertrees forms a hyperforest.
+                  </p>
+                  <p>
+                    Here, each vertex color defines a hyperedge, including the
+                    initially assigned colors. Pedantic requires the whole graph
+                    to be connected, and all vertices with the same color to
+                    form one connected subtree. New hypertrees have pedantic
+                    disabled by default.
+                  </p>
+                </div>
+              </div>
+              <button
+                className="quiet-button pedantic-toggle finished-toggle"
+                role="switch"
+                aria-label="finished"
+                aria-checked={tree.showFinished ?? false}
+                disabled={busy}
+                onClick={() => {
+                  void run({
+                    type: "showFinished",
+                    treeId: tree.id,
+                    enabled: !tree.showFinished,
+                  });
+                }}
+              >
+                <span className="toggle-track" aria-hidden="true">
+                  <i />
+                </span>
+                finished
+              </button>
+            </div>
+            <button className="primary-button" onClick={() => setDialog(null)}>
+              Done
+            </button>
+          </Dialog>
+        )}
         {dialog === "tabs" && (
           <Dialog close={() => setDialog(null)} label="Rearrange tabs">
             <h2>Rearrange tabs</h2>
@@ -1065,13 +1045,36 @@ export function App({ workspace }: { workspace: Workspace }) {
             <h2>
               {dialog === "tree"
                 ? "What are you working toward?"
-                : `A new child of ${node?.title ?? "your goal"}.`}
+                : `A new child of ${state.nodes.find((item) => item.id === newParent)?.title ?? node?.title ?? "your goal"}.`}
             </h2>
             <form
               onSubmit={(event) => {
                 void create(event);
               }}
             >
+              {dialog === "child" && node && (
+                <label>
+                  Parent vertex
+                  <select
+                    aria-label="Parent vertex"
+                    value={newParent || node.id}
+                    disabled={busy}
+                    onChange={(event) => setNewParent(event.target.value)}
+                  >
+                    {state.nodes
+                      .filter(
+                        (item) =>
+                          item.treeId === node.treeId &&
+                          item.finishedAt === undefined,
+                      )
+                      .map((item) => (
+                        <option key={item.id} value={item.id}>
+                          {nodePath(state, item.id)}
+                        </option>
+                      ))}
+                  </select>
+                </label>
+              )}
               {dialog === "child" && node && (
                 <label>
                   Vertex type
@@ -1124,7 +1127,7 @@ export function App({ workspace }: { workspace: Workspace }) {
                 />
               </label>
               <button className="primary-button" type="submit" disabled={busy}>
-                {dialog === "tree" ? "Create hypertree" : "Add step"}
+                {dialog === "tree" ? "Create hypertree" : "Add vertex"}
                 <Icon name="plus" />
               </button>
             </form>

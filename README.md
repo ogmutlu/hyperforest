@@ -28,8 +28,8 @@ Open the printed URL, including `/hyperforest/`. Vite's base path is fixed to
   parent; with pedantic off, drop it on empty space to disconnect. A disconnected vertex has a
   handle above it for reconnecting. The **Parent connection** selector provides
   the same controls without dragging. Cycles are rejected.
-- **New vertex**, next to **Edit graph** and **pedantic**, creates a child of the selected vertex.
-  With pedantic off, disconnect it using the parent selector to create an independent component.
+- **New vertex**, next to **Edit graph**, opens a dialog with a **Parent vertex** selector, defaulting to the selected vertex. Choose **Add vertex** to create it.
+  With pedantic off, drag its edge onto empty space to create an independent component.
   **Vertex color** in the top menu opens the color picker. Its numbered
   eight filled **Default colors** swatches start with the root's gold, followed by the generated subtree palette. **Fill interior** switches
   between a filled vertex and a colored boundary without losing its color.
@@ -40,7 +40,7 @@ Open the printed URL, including `/hyperforest/`. Vite's base path is fixed to
   all hypertrees, vertices, notes, and sessions. Export a backup first to keep a copy.
 - **Done editing** freezes vertex positions and connections. Selection, focus,
   panning and zooming remain available.
-- **pedantic**, on the right of the edit toolbar, is disabled by default for new
+- **pedantic**, in **Options**, is disabled by default for new
   hypertrees. It requires the entire graph to be connected and each color's
   vertices to induce a connected subtree of the host tree. Each graph represents
   a hypertree; the separate hypertrees together form a hyperforest. Hover or focus
@@ -54,7 +54,7 @@ Open the printed URL, including `/hyperforest/`. Vite's base path is fixed to
 - Select a child and choose **Finish goal** to hide and preserve its subtree,
   including notes, focus time, and session history. Its name and default color
   become available for reuse. Any active session in that subtree is saved.
-- Toggle **finished**, to the right of **pedantic**, to display finished vertices
+- Toggle **finished** in **Options**, to display finished vertices
   as translucent ghosts. You can inspect their notes and time, but cannot focus
   or rearrange them. The toggle is saved per hypertree. Finished vertices stay
   in exports and are excluded from pedantic checks. **Delete subtree** remains
