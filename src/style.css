@@ -1997,3 +1997,39 @@ button:disabled {
 .graph-options-controls #finished-explanation {
   margin: 0;
 }
+
+.dialog:has(.graph-options-controls) {
+  overflow: visible;
+}
+.option-info-control {
+  position: relative;
+  width: max-content;
+  max-width: 100%;
+}
+.option-info-popup {
+  display: none;
+  position: absolute;
+  bottom: calc(100% + 8px);
+  left: 0;
+  width: min(360px, calc(100vw - 96px));
+  padding: 16px;
+  z-index: 30;
+  background: #131c25;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  box-shadow: 0 12px 40px #0008;
+  font-size: 12px;
+  line-height: 1.6;
+  color: #b7c4cd;
+  pointer-events: none;
+}
+.option-info-popup p {
+  margin: 0;
+}
+.option-info-popup p + p {
+  margin-top: 12px;
+}
+.option-info-control > button:hover + .option-info-popup,
+.option-info-control > button:focus-visible + .option-info-popup {
+  display: block;
+}

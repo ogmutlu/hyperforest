@@ -1269,3 +1269,23 @@ test("right menu uses an Options icon and aligned equal-sized control rows", asy
     page.getByRole("switch", { name: "finished", exact: true }),
   ).toHaveAccessibleDescription(/notes and focus time/);
 });
+
+test("pedantic and finished show separate explanations only on hover or keyboard focus", async ({
+  page,
+}) => {
+  await page.goto("./");
+  await page.getByRole("button", { name: "Options", exact: true }).click();
+  const pedantic = page.getByRole("switch", { name: "pedantic", exact: true });
+  const finished = page.getByRole("switch", { name: "finished", exact: true });
+  await expect(page.locator("#pedantic-definition")).toBeHidden();
+  await expect(page.locator("#finished-explanation")).toBeHidden();
+  await pedantic.hover();
+  await expect(page.getByRole("tooltip")).toHaveCount(1);
+  await expect(page.getByRole("tooltip")).toContainText("connected subtree");
+  await finished.hover();
+  await expect(page.getByRole("tooltip")).toHaveCount(1);
+  await expect(page.getByRole("tooltip")).toContainText("translucent ghosts");
+  await expect(page.locator("#pedantic-definition")).toBeHidden();
+  await page.getByRole("heading", { name: "Options", exact: true }).hover();
+  await expect(page.locator("#finished-explanation")).toBeHidden();
+});

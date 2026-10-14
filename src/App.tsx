@@ -925,7 +925,7 @@ export function App({ workspace }: { workspace: Workspace }) {
           <Dialog close={() => setDialog(null)} label="Graph options">
             <h2>Options</h2>
             <div className="graph-options-controls">
-              <div className="pedantic-control">
+              <div className="option-info-control">
                 <button
                   className="quiet-button pedantic-toggle"
                   role="switch"
@@ -949,7 +949,7 @@ export function App({ workspace }: { workspace: Workspace }) {
                 <div
                   id="pedantic-definition"
                   role="tooltip"
-                  className="pedantic-tooltip"
+                  className="option-info-popup"
                 >
                   <p>
                     A hypertree is a hypergraph with a host tree in which each
@@ -966,32 +966,40 @@ export function App({ workspace }: { workspace: Workspace }) {
                   </p>
                 </div>
               </div>
-              <button
-                className="quiet-button pedantic-toggle finished-toggle"
-                role="switch"
-                aria-label="finished"
-                aria-describedby="finished-explanation"
-                aria-checked={tree.showFinished ?? false}
-                disabled={busy}
-                onClick={() => {
-                  void run({
-                    type: "showFinished",
-                    treeId: tree.id,
-                    enabled: !tree.showFinished,
-                  });
-                }}
-              >
-                <span className="toggle-track" aria-hidden="true">
-                  <i />
-                </span>
-                finished
-              </button>
-              <p id="finished-explanation">
-                Show finished tasks as translucent ghosts in this graph.
-                Finishing hides and preserves a subtree, including its notes and
-                focus time, and frees its name for reuse. Ghosts cannot be
-                focused or rearranged.
-              </p>
+              <div className="option-info-control">
+                <button
+                  className="quiet-button pedantic-toggle finished-toggle"
+                  role="switch"
+                  aria-label="finished"
+                  aria-describedby="finished-explanation"
+                  aria-checked={tree.showFinished ?? false}
+                  disabled={busy}
+                  onClick={() => {
+                    void run({
+                      type: "showFinished",
+                      treeId: tree.id,
+                      enabled: !tree.showFinished,
+                    });
+                  }}
+                >
+                  <span className="toggle-track" aria-hidden="true">
+                    <i />
+                  </span>
+                  finished
+                </button>
+                <div
+                  id="finished-explanation"
+                  role="tooltip"
+                  className="option-info-popup"
+                >
+                  <p>
+                    Show finished tasks as translucent ghosts in this graph.
+                    Finishing hides and preserves a subtree, including its notes
+                    and focus time, and frees its name for reuse. Ghosts cannot
+                    be focused or rearranged.
+                  </p>
+                </div>
+              </div>
             </div>
             <button className="primary-button" onClick={() => setDialog(null)}>
               Done
