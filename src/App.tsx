@@ -732,7 +732,7 @@ export function App({ workspace }: { workspace: Workspace }) {
                   aria-pressed={editing}
                   onClick={() => setEditing((value) => !value)}
                 >
-                  <Icon name={editing ? "check" : "pencil"} />{" "}
+                  <Icon name={editing ? "check" : "pencil"} size={16} />{" "}
                   {editing ? "Done editing" : "Edit graph"}
                 </button>
                 <button
@@ -745,13 +745,15 @@ export function App({ workspace }: { workspace: Workspace }) {
                     setDialog("child");
                   }}
                 >
-                  <Icon name="plus" /> New vertex
+                  <Icon name="plus" size={16} /> New vertex
                 </button>
                 <button
-                  className="quiet-button"
+                  className="icon-button"
+                  aria-label="Options"
+                  title="Options"
                   onClick={() => setDialog("options")}
                 >
-                  Options
+                  <Icon name="settings" size={16} />
                 </button>
               </div>
 
@@ -968,6 +970,7 @@ export function App({ workspace }: { workspace: Workspace }) {
                 className="quiet-button pedantic-toggle finished-toggle"
                 role="switch"
                 aria-label="finished"
+                aria-describedby="finished-explanation"
                 aria-checked={tree.showFinished ?? false}
                 disabled={busy}
                 onClick={() => {
@@ -983,6 +986,12 @@ export function App({ workspace }: { workspace: Workspace }) {
                 </span>
                 finished
               </button>
+              <p id="finished-explanation">
+                Show finished tasks as translucent ghosts in this graph.
+                Finishing hides and preserves a subtree, including its notes and
+                focus time, and frees its name for reuse. Ghosts cannot be
+                focused or rearranged.
+              </p>
             </div>
             <button className="primary-button" onClick={() => setDialog(null)}>
               Done

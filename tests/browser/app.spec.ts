@@ -1245,3 +1245,27 @@ test("new vertex chooses a parent in its dialog and submits with Add vertex", as
     id,
   );
 });
+
+test("right menu uses an Options icon and aligned equal-sized control rows", async ({
+  page,
+}) => {
+  await page.goto("./");
+  const top = page.locator(".edit-toolbar > button");
+  const bottom = page.locator(".inspector-actions > button");
+  await expect(top).toHaveCount(3);
+  await expect(bottom).toHaveCount(3);
+  const options = page.getByRole("button", { name: "Options", exact: true });
+  await expect(options).toHaveText("");
+  await expect(options.locator("svg")).toHaveCount(1);
+  for (let index = 0; index < 3; index++) {
+    const upper = await top.nth(index).boundingBox();
+    const lower = await bottom.nth(index).boundingBox();
+    expect(upper!.x).toBe(lower!.x);
+    expect(upper!.width).toBe(lower!.width);
+    expect(upper!.height).toBe(lower!.height);
+  }
+  await options.click();
+  await expect(
+    page.getByRole("switch", { name: "finished", exact: true }),
+  ).toHaveAccessibleDescription(/notes and focus time/);
+});

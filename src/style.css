@@ -1964,3 +1964,36 @@ button:disabled {
   width: auto;
   margin-top: 12px;
 }
+
+/* Matching columns and sizes for both rows of graph controls. */
+.inspector > .edit-toolbar,
+.inspector > .inspector-actions {
+  display: grid;
+  grid-template-columns: 100px 104px 32px;
+  gap: 8px;
+  width: 252px;
+  max-width: 100%;
+  height: 28px;
+  align-self: center;
+  justify-self: end;
+  justify-content: end;
+  align-items: center;
+}
+.inspector > .edit-toolbar > button,
+.inspector > .inspector-actions > button {
+  width: 100%;
+  height: 28px;
+  min-height: 28px;
+  padding: 6px;
+  font-size: 11px;
+  gap: 6px;
+  justify-content: center;
+  white-space: nowrap;
+}
+.inspector > .edit-toolbar > button:first-child,
+.inspector > .edit-toolbar > button:nth-child(2) {
+  width: 100%;
+}
+.graph-options-controls #finished-explanation {
+  margin: 0;
+}
