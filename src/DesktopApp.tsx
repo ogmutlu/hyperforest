@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState, useRef } from "react";
+import { connectTray } from "./tray";
 import { App } from "./App";
 import { chooseDesktop, loadDesktop } from "./desktop";
 import type { DesktopWorkspace } from "./desktop";
@@ -85,6 +86,20 @@ export function DesktopApp() {
       document.removeEventListener("visibilitychange", visible);
     };
   }, [workspace, flush]);
+  useEffect(() => {
+    let disposed = false;
+    let disconnect: (() => void) | undefined;
+    void connectTray(workspace, setError)
+      .then((cleanup) => {
+        if (disposed) cleanup();
+        else disconnect = cleanup;
+      })
+      .catch((reason: unknown) => setError(String(reason)));
+    return () => {
+      disposed = true;
+      disconnect?.();
+    };
+  }, [workspace]);
   const choose = async (): Promise<void> => {
     setBusy(true);
     try {

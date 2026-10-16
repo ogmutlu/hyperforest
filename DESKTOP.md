@@ -23,7 +23,7 @@ npm run desktop:dev
 Building requires Rust, Node.js, and Linux development libraries:
 
 ```sh
-sudo apt install libwebkit2gtk-4.1-dev libgtk-3-dev libssl-dev librsvg2-dev patchelf
+sudo apt install libwebkit2gtk-4.1-dev libgtk-3-dev libssl-dev librsvg2-dev patchelf libayatana-appindicator3-dev
 ```
 
 The Debian package uses the system WebKitGTK runtime. An AppImage target is also
@@ -95,3 +95,11 @@ Checks: `npm test`, `npm run test:e2e`, and `npm run desktop:test`.
 Use the − / percentage / + controls above the app to zoom the entire interface.
 Keyboard shortcuts are Ctrl+plus, Ctrl+minus, and Ctrl+0 to reset. Ctrl+scroll on
 menus also changes interface zoom; Ctrl+scroll over the graph changes its camera.
+
+The tray menu shows the current focus vertex name and elapsed timer, updated every
+second. Pausing freezes the timer and marks it **Paused**. It also offers
+**Open app**, **Pause focus**, **Resume focus**, and **Quit**.
+Pause/Resume reflect the same saved session as the window. Closing the window
+hides it while focus and autosave continue; use **Open app** to return. **Quit**
+pauses and saves before exiting. If a save fails, the window opens with the error
+instead of quitting. Your desktop panel must support tray/AppIndicator icons.

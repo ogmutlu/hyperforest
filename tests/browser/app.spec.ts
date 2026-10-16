@@ -1294,9 +1294,26 @@ test("desktop uses selected YAML and Markdown storage rather than browser worksp
   page,
 }) => {
   await page.addInitScript(() => {
+    const callbacks = new Map<number, (event: { payload: string }) => void>();
+    const handlers = new Map<number, { event: string; handler: number }>();
+    let nextId = 1;
     Object.assign(window, {
       isTauri: true,
+      __TAURI_EVENT_PLUGIN_INTERNALS__: {
+        unregisterListener: (_event: string, id: number) => handlers.delete(id),
+      },
+      testTrayAction: (payload: string) => {
+        for (const item of handlers.values())
+          if (item.event === "hyperforest-tray-action")
+            callbacks.get(item.handler)?.({ payload });
+      },
       __TAURI_INTERNALS__: {
+        transformCallback: (callback: (event: { payload: string }) => void) => {
+          const id = nextId++;
+          callbacks.set(id, callback);
+          return id;
+        },
+        unregisterCallback: (id: number) => callbacks.delete(id),
         metadata: {
           currentWebview: { label: "main" },
           currentWindow: { label: "main" },
@@ -1307,9 +1324,32 @@ test("desktop uses selected YAML and Markdown storage rather than browser worksp
             directory?: string;
             request?: { yaml: string; notes: Record<string, string> };
             value?: number;
+            event?: string;
+            handler?: number;
+            eventId?: number;
+            running?: boolean;
+            paused?: boolean;
           },
         ) => {
           const key = "test.desktop.files";
+          if (command === "plugin:event|listen") {
+            const id = nextId++;
+            handlers.set(id, { event: args.event!, handler: args.handler! });
+            return id;
+          }
+          if (command === "plugin:event|unlisten") {
+            handlers.delete(args.eventId!);
+            return null;
+          }
+          if (command === "desktop_tray_state") {
+            localStorage.setItem("test.tray-state", JSON.stringify(args));
+            return null;
+          }
+          if (command === "desktop_quit") {
+            localStorage.setItem("test.quit", "yes");
+            return null;
+          }
+          if (command === "desktop_show_window") return null;
           if (command === "plugin:webview|set_webview_zoom") {
             localStorage.setItem("test.zoom", String(args.value));
             return null;
@@ -1416,4 +1456,44 @@ test("desktop uses selected YAML and Markdown storage rather than browser worksp
   expect(Object.values(reopened.notes)).toContain(
     "# Draft saved before opening",
   );
+  await page.getByRole("button", { name: "Focus", exact: true }).click();
+  await expect
+    .poll(() =>
+      page.evaluate(
+        () => JSON.parse(localStorage.getItem("test.tray-state")!).running,
+      ),
+    )
+    .toBe(true);
+  await page.evaluate(() =>
+    (
+      window as unknown as { testTrayAction: (action: string) => void }
+    ).testTrayAction("pause"),
+  );
+  await expect
+    .poll(() =>
+      page.evaluate(
+        () => JSON.parse(localStorage.getItem("test.tray-state")!).paused,
+      ),
+    )
+    .toBe(true);
+  await page.evaluate(() =>
+    (
+      window as unknown as { testTrayAction: (action: string) => void }
+    ).testTrayAction("resume"),
+  );
+  await expect
+    .poll(() =>
+      page.evaluate(
+        () => JSON.parse(localStorage.getItem("test.tray-state")!).running,
+      ),
+    )
+    .toBe(true);
+  await page.evaluate(() =>
+    (
+      window as unknown as { testTrayAction: (action: string) => void }
+    ).testTrayAction("quit"),
+  );
+  await expect
+    .poll(() => page.evaluate(() => localStorage.getItem("test.quit")))
+    .toBe("yes");
 });
