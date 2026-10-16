@@ -1,12 +1,11 @@
-import { useEffect, useRef, useState } from "react";
+import { GraphVertex } from "./GraphVertex";
+import { GraphEdge } from "./GraphEdge";
+import { useFrameState } from "./useFrameState";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { PointerEvent as ReactPointerEvent } from "react";
-import type { Action, GoalNode, State } from "./domain";
-import { assignedNodeColor, assignedNodeColors, shortTime } from "./domain";
+import type { Action, GoalNode, State } from "./model";
 import { Icon } from "./icons";
 
-export function nodeColor(state: State, node: GoalNode): string {
-  return assignedNodeColor(state.nodes, node);
-}
 interface Props {
   editing: boolean;
   state: State;
@@ -25,7 +24,7 @@ interface Drag {
   y: number;
   moved: boolean;
 }
-export function Graph({
+export const Graph = memo(function Graph({
   editing,
   state,
   treeId,
@@ -37,14 +36,37 @@ export function Graph({
 }: Props) {
   const svg = useRef<SVGSVGElement>(null);
   const drag = useRef<Drag | null>(null);
-  const [link, setLink] = useState<{ id: string; x: number; y: number } | null>(
-    null,
-  );
-  const [position, setPosition] = useState<{
+  const [link, setLink, flushLink, latestLink] = useFrameState<{
     id: string;
     x: number;
     y: number;
   } | null>(null);
+  const [position, setPosition, flushPosition] = useFrameState<{
+    id: string;
+    x: number;
+    y: number;
+  } | null>(null);
+  const [navigating, setNavigating] = useState(false);
+  const navigationEnd = useRef<number | null>(null);
+  const endNavigation = useCallback(() => {
+    if (navigationEnd.current !== null)
+      window.clearTimeout(navigationEnd.current);
+    navigationEnd.current = null;
+    setNavigating(false);
+  }, []);
+  const beginNavigation = useCallback(() => {
+    setNavigating(true);
+    if (navigationEnd.current !== null)
+      window.clearTimeout(navigationEnd.current);
+    navigationEnd.current = window.setTimeout(endNavigation, 300);
+  }, [endNavigation]);
+  useEffect(
+    () => () => {
+      if (navigationEnd.current !== null)
+        window.clearTimeout(navigationEnd.current);
+    },
+    [],
+  );
   const [compact, setCompact] = useState(
     () => window.matchMedia("(max-width: 760px)").matches,
   );
@@ -52,13 +74,14 @@ export function Graph({
     small: boolean,
   ): { x: number; y: number; scale: number } =>
     small ? { x: 264, y: 172.8, scale: 0.52 } : { x: 0, y: 0, scale: 1 };
-  const [camera, setCamera] = useState(() => fitCamera(compact));
+  const [camera, setCamera, , latestCamera] = useFrameState(fitCamera(compact));
   useEffect(() => {
     const element = svg.current;
     if (!element) return;
     const wheel = (event: WheelEvent): void => {
       if (!event.ctrlKey) return;
       event.preventDefault();
+      beginNavigation();
       setCamera((previous) => ({
         ...previous,
         scale: Math.max(
@@ -70,7 +93,7 @@ export function Graph({
     // A non-passive listener prevents Ctrl+wheel from zooming the browser.
     element.addEventListener("wheel", wheel, { passive: false });
     return () => element.removeEventListener("wheel", wheel);
-  }, []);
+  }, [beginNavigation, setCamera]);
   useEffect(() => {
     const media = window.matchMedia("(max-width: 760px)");
     const changed = (): void => {
@@ -81,59 +104,75 @@ export function Graph({
     return () => media.removeEventListener("change", changed);
   }, []);
   const [dragging, setDragging] = useState(false);
-  const nodes = state.nodes
-    .filter(
-      (node) =>
-        node.treeId === treeId &&
-        (node.finishedAt === undefined ||
-          state.trees.find((tree) => tree.id === treeId)?.showFinished),
-    )
-    .map((node) =>
-      node.id === position?.id
-        ? { ...node, x: position.x, y: position.y }
-        : node,
-    );
+  const showFinished = state.trees.find(
+    (tree) => tree.id === treeId,
+  )?.showFinished;
+  const visibleNodes = useMemo(
+    () =>
+      state.nodes.filter(
+        (node) =>
+          node.treeId === treeId &&
+          (node.finishedAt === undefined || showFinished),
+      ),
+    [state.nodes, treeId, showFinished],
+  );
+  const nodes = useMemo(
+    () =>
+      position
+        ? visibleNodes.map((node) =>
+            node.id === position.id
+              ? { ...node, x: position.x, y: position.y }
+              : node,
+          )
+        : visibleNodes,
+    [visibleNodes, position],
+  );
+  const nodesById = useMemo(
+    () => new Map(nodes.map((node) => [node.id, node])),
+    [nodes],
+  );
   const coordinate = (x: number, y: number): DOMPoint => {
     const matrix = svg.current?.getScreenCTM();
     return matrix
       ? new DOMPoint(x, y).matrixTransform(matrix.inverse())
       : new DOMPoint(x, y);
   };
-  const down = (
-    event: ReactPointerEvent<SVGElement>,
-    node?: GoalNode,
-  ): void => {
-    if (event.button !== 0) return;
-    event.stopPropagation();
-    if (node && (!editing || node.finishedAt !== undefined)) {
-      select(node.id);
-      return;
-    }
-    const point = coordinate(event.clientX, event.clientY);
-    drag.current = {
-      id: node?.id ?? null,
-      startX: point.x,
-      startY: point.y,
-      x: node?.x ?? camera.x,
-      y: node?.y ?? camera.y,
-      moved: false,
-    };
-    if (node) select(node.id);
-  };
-  const linkDown = (
-    event: ReactPointerEvent<SVGElement>,
-    node: GoalNode,
-  ): void => {
-    if (!editing || node.finishedAt !== undefined || event.button !== 0) return;
-    event.stopPropagation();
-    const point = coordinate(event.clientX, event.clientY);
-    setLink({
-      id: node.id,
-      x: (point.x - camera.x) / camera.scale,
-      y: (point.y - camera.y) / camera.scale,
-    });
-    svg.current?.setPointerCapture(event.pointerId);
-  };
+  const down = useCallback(
+    (event: ReactPointerEvent<SVGElement>, node?: GoalNode): void => {
+      if (event.button !== 0) return;
+      event.stopPropagation();
+      if (node && (!editing || node.finishedAt !== undefined)) {
+        select(node.id);
+        return;
+      }
+      const point = coordinate(event.clientX, event.clientY);
+      drag.current = {
+        id: node?.id ?? null,
+        startX: point.x,
+        startY: point.y,
+        x: node?.x ?? latestCamera.current.x,
+        y: node?.y ?? latestCamera.current.y,
+        moved: false,
+      };
+      if (node) select(node.id);
+    },
+    [editing, select, latestCamera],
+  );
+  const linkDown = useCallback(
+    (event: ReactPointerEvent<SVGElement>, node: GoalNode): void => {
+      if (!editing || node.finishedAt !== undefined || event.button !== 0)
+        return;
+      event.stopPropagation();
+      const point = coordinate(event.clientX, event.clientY);
+      setLink({
+        id: node.id,
+        x: (point.x - latestCamera.current.x) / latestCamera.current.scale,
+        y: (point.y - latestCamera.current.y) / latestCamera.current.scale,
+      });
+      svg.current?.setPointerCapture(event.pointerId);
+    },
+    [editing, setLink, latestCamera],
+  );
   useEffect(() => {
     if (!editing) {
       drag.current = null;
@@ -141,14 +180,14 @@ export function Graph({
       setLink(null);
       setDragging(false);
     }
-  }, [editing]);
+  }, [editing, setPosition, setLink]);
   const move = (event: ReactPointerEvent<SVGSVGElement>): void => {
-    if (link) {
+    if (latestLink.current) {
       const point = coordinate(event.clientX, event.clientY);
       setLink({
-        ...link,
-        x: (point.x - camera.x) / camera.scale,
-        y: (point.y - camera.y) / camera.scale,
+        ...latestLink.current,
+        x: (point.x - latestCamera.current.x) / latestCamera.current.scale,
+        y: (point.y - latestCamera.current.y) / latestCamera.current.scale,
       });
       return;
     }
@@ -161,20 +200,25 @@ export function Graph({
     if (!current.moved) return;
     svg.current?.setPointerCapture(event.pointerId);
     setDragging(true);
+    beginNavigation();
     if (current.id)
       setPosition({
         id: current.id,
-        x: current.x + dx / camera.scale,
-        y: current.y + dy / camera.scale,
+        x: current.x + dx / latestCamera.current.scale,
+        y: current.y + dy / latestCamera.current.scale,
       });
-    else
+    else {
       setCamera((previous) => ({
         ...previous,
         x: current.x + dx,
         y: current.y + dy,
       }));
+    }
   };
   const up = async (): Promise<void> => {
+    endNavigation();
+    const link = flushLink();
+    const position = flushPosition();
     if (link) {
       const target = nodes.find(
         (node) =>
@@ -194,7 +238,7 @@ export function Graph({
   };
   return (
     <div
-      className={`graph ${editing ? "editing" : "frozen"} ${dragging ? "is-dragging" : ""}`}
+      className={`graph ${navigating && nodes.length > 150 ? "is-navigating" : ""} ${editing ? "editing" : "frozen"} ${dragging ? "is-dragging" : ""}`}
     >
       <div className="canvas-grain" />
       <svg
@@ -209,6 +253,7 @@ export function Graph({
           void up();
         }}
         onPointerCancel={() => {
+          endNavigation();
           drag.current = null;
           setPosition(null);
           setLink(null);
@@ -216,9 +261,6 @@ export function Graph({
         }}
       >
         <defs>
-          <filter id="glow">
-            <feGaussianBlur stdDeviation="5" />
-          </filter>
           <pattern
             id="dots"
             width="28"
@@ -233,63 +275,21 @@ export function Graph({
           transform={`translate(${camera.x} ${camera.y}) scale(${camera.scale})`}
         >
           {nodes.map((node) => {
-            const parent = nodes.find((item) => item.id === node.parentId);
-            if (!parent) return null;
-            const color = nodeColor(state, node);
-            const d = `M${parent.x},${parent.y + (parent.id === treeId ? 24 : 18)} C${parent.x},${(parent.y + node.y) / 2} ${node.x},${(parent.y + node.y) / 2} ${node.x},${node.y - (node.id === treeId ? 24 : 18)}`;
-            return (
-              <g
-                key={`edge-${node.id}`}
-                className={
-                  node.finishedAt !== undefined ? "edge finished-edge" : "edge"
-                }
-                data-testid={`edge-${node.id}`}
-                onPointerDown={(event) => linkDown(event, node)}
-              >
-                {editing && node.finishedAt === undefined && (
-                  <>
-                    <path
-                      d={d}
-                      stroke="transparent"
-                      strokeWidth="18"
-                      fill="none"
-                      className="edge-handle"
-                      onPointerDown={(event) => linkDown(event, node)}
-                    />
-                    <circle
-                      cx={(parent.x + node.x) / 2}
-                      cy={(parent.y + node.y) / 2}
-                      r="8"
-                      fill="#101820"
-                      stroke={color}
-                      strokeWidth="2"
-                      className="edge-handle"
-                      data-testid={`edge-handle-${node.id}`}
-                      onPointerDown={(event) => linkDown(event, node)}
-                    />
-                  </>
-                )}
-                <path
-                  d={d}
-                  stroke={color}
-                  strokeWidth="5"
-                  opacity=".09"
-                  filter="url(#glow)"
-                  fill="none"
-                />
-                <path
-                  d={d}
-                  stroke={color}
-                  strokeWidth="1.2"
-                  opacity=".55"
-                  fill="none"
-                />
-              </g>
-            );
+            const parent = nodesById.get(node.parentId ?? "");
+            return parent ? (
+              <GraphEdge
+                key={node.id}
+                node={node}
+                parent={parent}
+                treeId={treeId}
+                editing={editing}
+                linkDown={linkDown}
+              />
+            ) : null;
           })}
           {link &&
             (() => {
-              const child = nodes.find((node) => node.id === link.id);
+              const child = nodesById.get(link.id);
               return child ? (
                 <path
                   d={`M${link.x},${link.y} L${child.x},${child.y}`}
@@ -300,141 +300,21 @@ export function Graph({
                 />
               ) : null;
             })()}
-          {nodes.map((node) => {
-            const color = nodeColor(state, node);
-            const colors = assignedNodeColors(state.nodes, node);
-            const isActive = state.focus?.nodeId === node.id;
-
-            const radius = node.id === treeId ? 24 : 18;
-            return (
-              <g
-                key={node.id}
-                transform={`translate(${node.x} ${node.y})`}
-                className={`goal ${node.id === treeId ? "root-goal" : ""} ${selected === node.id ? "selected" : ""} ${isActive ? "active" : ""} ${node.finishedAt !== undefined ? "finished-ghost" : ""}`}
-                data-testid={`node-${node.id}`}
-              >
-                <g
-                  role="button"
-                  tabIndex={0}
-                  aria-label={`Select ${node.title}`}
-                  onPointerDown={(event) => down(event, node)}
-                  onDoubleClick={(event) => {
-                    event.stopPropagation();
-                    if (node.finishedAt !== undefined) return;
-                    void start(node.id, {
-                      x: event.clientX - innerWidth / 2,
-                      y: event.clientY - innerHeight / 2,
-                    });
-                  }}
-                  onKeyDown={(event) => {
-                    if (event.key === "Enter" || event.key === " ") {
-                      event.preventDefault();
-                      select(node.id);
-                    }
-                  }}
-                >
-                  {node.id === treeId && (
-                    <circle
-                      r={radius + 5}
-                      fill="none"
-                      stroke={color}
-                      strokeWidth="2"
-                    />
-                  )}
-                  <circle
-                    r={radius + 13}
-                    className="node-aura"
-                    fill={color}
-                    filter="url(#glow)"
-                  />
-                  <circle
-                    r={radius + 7}
-                    className="selection-ring"
-                    stroke={color}
-                    strokeWidth=".8"
-                    strokeDasharray="2 5"
-                    fill="none"
-                  />
-                  <circle
-                    r={radius}
-                    data-testid={`node-fill-${node.id}`}
-                    fill={node.filled ? color : "#101820"}
-                    stroke={color}
-                    strokeWidth={selected === node.id ? "2" : "1.4"}
-                  />
-                  {colors.length > 1 && (
-                    <g data-testid={`node-colors-${node.id}`}>
-                      {colors.map((segment, index) => {
-                        const start =
-                          -Math.PI / 2 + (index * 2 * Math.PI) / colors.length;
-                        const end =
-                          -Math.PI / 2 +
-                          ((index + 1) * 2 * Math.PI) / colors.length;
-                        const arc = `M${radius * Math.cos(start)},${radius * Math.sin(start)} A${radius},${radius} 0 0 1 ${radius * Math.cos(end)},${radius * Math.sin(end)}`;
-                        return (
-                          <path
-                            key={segment}
-                            data-color={segment}
-                            d={
-                              node.filled
-                                ? `M0,0 L${radius * Math.cos(start)},${radius * Math.sin(start)} ${arc.slice(arc.indexOf(" A") + 1)} Z`
-                                : arc
-                            }
-                            fill={node.filled ? segment : "none"}
-                            stroke={segment}
-                            strokeWidth={selected === node.id ? "2" : "1.4"}
-                          />
-                        );
-                      })}
-                    </g>
-                  )}
-                  <circle
-                    r={radius - 7}
-                    fill="none"
-                    stroke={color}
-                    opacity=".16"
-                    strokeWidth=".7"
-                  />
-                  <text
-                    y={radius + 23}
-                    textAnchor="middle"
-                    className="node-title"
-                    fill="#ffffff"
-                  >
-                    {node.title.length > 23
-                      ? `${node.title.slice(0, 22)}…`
-                      : node.title}
-                  </text>
-                  <text
-                    y={radius + 40}
-                    textAnchor="middle"
-                    className="node-time"
-                  >
-                    {shortTime(time.get(node.id) ?? 0)}
-                    {node.estimateMinutes
-                      ? ` / ${shortTime(node.estimateMinutes * 60000)}`
-                      : " focused"}
-                  </text>
-                </g>
-                {editing &&
-                  node.finishedAt === undefined &&
-                  node.id !== treeId &&
-                  node.parentId === null && (
-                    <circle
-                      cx="0"
-                      cy={-radius - 10}
-                      r="8"
-                      fill="#101820"
-                      stroke={color}
-                      strokeWidth="2"
-                      className="edge-handle"
-                      data-testid={`edge-handle-${node.id}`}
-                      onPointerDown={(event) => linkDown(event, node)}
-                    />
-                  )}
-              </g>
-            );
-          })}
+          {nodes.map((node) => (
+            <GraphVertex
+              key={node.id}
+              node={node}
+              treeId={treeId}
+              selected={selected === node.id}
+              isActive={state.focus?.nodeId === node.id}
+              editing={editing}
+              elapsed={time.get(node.id) ?? 0}
+              down={down}
+              linkDown={linkDown}
+              select={select}
+              start={start}
+            />
+          ))}
         </g>
       </svg>
       <div className="canvas-controls">
@@ -483,4 +363,4 @@ export function Graph({
       </div>
     </div>
   );
-}
+});

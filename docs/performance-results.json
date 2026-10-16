@@ -1,0 +1,72 @@
+{
+  "date": "2026-10-16",
+  "workload": "Synthetic 500-vertex workspace; local measurements, no CPU throttling",
+  "chromium": {
+    "version": "155.0.8059.79",
+    "baselineCommit": "b075773",
+    "baseline": {
+      "idleScriptMs": 188.8,
+      "panScriptMs": 1031.6,
+      "panTaskMs": 32669.5,
+      "panLayoutMs": 7.2
+    },
+    "refactorBeforeDenseNavigation": {
+      "idleScriptMs": 0,
+      "panScriptMs": 166.4,
+      "panTaskMs": 1623.9,
+      "panLayoutMs": 10.5
+    }
+  },
+  "nativeBeforeDenseNavigation": {
+    "devicePixelRatio": 1,
+    "editAndSaveMs": [
+      260,
+      242,
+      250
+    ],
+    "engine": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/60.5 Safari/605.1.15",
+    "idleFrames": {
+      "frames": 60,
+      "maxMs": 33,
+      "medianMs": 32,
+      "over25ms": 60,
+      "p95Ms": 33
+    },
+    "note": "Visible production Tauri/WebKit window. Includes real Rust WASM, IPC, reports, disk writes, and daily backup updates. Frame intervals include display pacing.",
+    "startupToSavedGraphMs": 1985,
+    "vertices": 500,
+    "zoomFrames": {
+      "frames": 120,
+      "maxMs": 226,
+      "medianMs": 182,
+      "over25ms": 120,
+      "p95Ms": 189
+    }
+  },
+  "nativeFinal": {
+    "devicePixelRatio": 1,
+    "editAndSaveMs": [
+      584,
+      410,
+      402
+    ],
+    "engine": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/60.5 Safari/605.1.15",
+    "idleFrames": {
+      "frames": 60,
+      "maxMs": 37,
+      "medianMs": 32,
+      "over25ms": 59,
+      "p95Ms": 33
+    },
+    "note": "Visible production Tauri/WebKit window. Includes real Rust WASM, IPC, reports, disk writes, and daily backup updates. Frame intervals include display pacing.",
+    "startupToSavedGraphMs": 1500,
+    "vertices": 500,
+    "zoomFrames": {
+      "frames": 120,
+      "maxMs": 167,
+      "medianMs": 32,
+      "over25ms": 113,
+      "p95Ms": 35
+    }
+  }
+}

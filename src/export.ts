@@ -1,8 +1,11 @@
+import { stringify } from "yaml";
+import { readWorkspace, workspaceFiles } from "./workspaceFiles";
 import { strToU8, strFromU8, zipSync, unzipSync } from "fflate";
-import { assignedNodeColors, formatTime, totals } from "./domain";
-import type { GoalNode, State } from "./domain";
+import { assignedNodeColors, formatTime, formatHms } from "./presentation";
+import { totals } from "./domainClient";
+import type { GoalNode, State } from "./model";
 
-/** A YAML report, separate from the lossless JSON backup. */
+/** Detailed derived report, separate from the editable workspace YAML. */
 export function structureYaml(state: State, now: number): string {
   const quote = (value: string): string => JSON.stringify(value);
   const lines = [
@@ -28,7 +31,7 @@ export function structureYaml(state: State, now: number): string {
         `${pad}  id: ${quote(node.id)}`,
         `${pad}  focus_time: ${quote(formatTime(time.get(node.id) ?? 0))}`,
         `${pad}  focus_milliseconds: ${time.get(node.id) ?? 0}`,
-        `${pad}  colors: [${assignedNodeColors(state.nodes, node).map(quote).join(", ")}]`,
+        `${pad}  colors: [${assignedNodeColors(node).map(quote).join(", ")}]`,
       );
       if (node.finishedAt !== undefined)
         lines.push(
@@ -57,35 +60,80 @@ export function structureYaml(state: State, now: number): string {
   return lines.join("\n") + "\n";
 }
 
-export function notesFilename(state: State, node: GoalNode): string {
-  const tree = state.trees.find((item) => item.id === node.treeId)!;
-  const title = `${tree.title} - ${node.title}`
-    .replace(/[\\/:*?"<>|\x00-\x1f]/g, "-")
-    .replace(/[. ]+$/, "");
-  return `${title || "notes"}.md`;
-}
 export function exportArchive(state: State, now: number): Uint8Array {
+  const payload = workspaceFiles(state);
   const files: Record<string, Uint8Array> = {
-    "hyperforest-backup.json": strToU8(JSON.stringify(state, null, 2)),
-    "hyperforest-structure.yaml": strToU8(structureYaml(state, now)),
+    "workspace.yaml": strToU8(payload.yaml),
+    "structure.yaml": strToU8(structureYaml(state, now)),
+    "simple.yaml": strToU8(simpleYaml(state, now)),
     "notes/": new Uint8Array(),
   };
-  for (const node of state.nodes) {
-    const filename = notesFilename(state, node);
-    let path = `notes/${filename}`;
-    let suffix = 2;
-    while (Object.hasOwn(files, path))
-      path = `notes/${filename.slice(0, -3)} (${suffix++}).md`;
-    files[path] = strToU8(node.notes);
-  }
+  for (const [name, text] of Object.entries(payload.notes))
+    files[`notes/${name}`] = strToU8(text);
   return zipSync(files);
 }
 export function archiveBackup(contents: Uint8Array): string {
   const files = unzipSync(contents, {
-    filter: (file) => file.name === "hyperforest-backup.json",
+    filter: (file) =>
+      file.name === "workspace.yaml" || /^notes\/[^/\\]+\.md$/.test(file.name),
   });
-  const backup = files["hyperforest-backup.json"];
-  if (!backup)
-    throw new Error("ZIP does not contain a hyperforest JSON backup.");
-  return strFromU8(backup);
+  const workspace = files["workspace.yaml"];
+  if (!workspace)
+    throw new Error("ZIP must contain workspace.yaml and its Markdown notes.");
+  const notes = Object.fromEntries(
+    Object.entries(files)
+      .filter(([name]) => name.startsWith("notes/") && name.endsWith(".md"))
+      .map(([name, data]) => [name.slice(6), strFromU8(data)]),
+  );
+  return JSON.stringify(readWorkspace(strFromU8(workspace), notes));
+}
+
+/** A deliberately small report for reading: names, hierarchy and durations. */
+export function simpleYaml(state: State, now: number): string {
+  const children = new Map<string, GoalNode[]>();
+  for (const node of state.nodes) {
+    if (node.parentId !== null) {
+      const siblings = children.get(node.parentId) ?? [];
+      siblings.push(node);
+      children.set(node.parentId, siblings);
+    }
+  }
+  const names = new Map(state.trees.map((tree) => [tree.id, tree.title]));
+  const hypertrees = state.trees.map((tree) => {
+    const time = totals(state, tree.id, now);
+    const describe = (node: GoalNode): SimpleGoal => ({
+      name: node.title,
+      focused: formatHms(time.get(node.id) ?? 0),
+      ...(node.estimateMinutes > 0
+        ? { estimate: formatHms(node.estimateMinutes * 60000) }
+        : {}),
+      ...(node.finishedAt !== undefined ? { finished: true } : {}),
+      ...(node.linkedTreeId
+        ? { linked: names.get(node.linkedTreeId) ?? "Deleted hypertree" }
+        : {}),
+      ...((children.get(node.id)?.length ?? 0) > 0
+        ? { children: children.get(node.id)!.map(describe) }
+        : {}),
+    });
+    const root = state.nodes.find((node) => node.id === tree.id)!;
+    const unconnected = state.nodes.filter(
+      (node) =>
+        node.treeId === tree.id &&
+        node.id !== tree.id &&
+        node.parentId === null,
+    );
+    return {
+      ...describe(root),
+      ...(unconnected.length ? { unconnected: unconnected.map(describe) } : {}),
+    };
+  });
+  return stringify({ hypertrees });
+}
+interface SimpleGoal {
+  name: string;
+  focused: string;
+  estimate?: string;
+  finished?: boolean;
+  linked?: string;
+  children?: SimpleGoal[];
 }

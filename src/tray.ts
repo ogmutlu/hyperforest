@@ -1,7 +1,8 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import type { DesktopWorkspace } from "./desktop";
-import { focusElapsed, formatTime } from "./domain";
+import { focusElapsed } from "./domainClient";
+import { formatTime } from "./presentation";
 
 export async function connectTray(
   workspace: DesktopWorkspace | null,

@@ -2063,3 +2063,16 @@ button:disabled {
 .interface-zoom button {
   min-width: 28px;
 }
+
+/* Keep dense SVG navigation cheap in WebKit. Restore detail after the gesture. */
+.graph.is-navigating .edge,
+.graph.is-navigating .node-title,
+.graph.is-navigating .node-time,
+.graph.is-navigating .node-aura,
+.graph.is-navigating .selection-ring,
+.graph.is-navigating .node-detail {
+  display: none;
+}
+.graph.is-navigating .goal.selected .node-title {
+  display: inline;
+}

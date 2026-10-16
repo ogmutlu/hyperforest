@@ -1,12 +1,18 @@
+import "../setup";
+import { sampleWorkspace } from "../sampleWorkspace";
 import { expect, test } from "@playwright/test";
 import type { Page } from "@playwright/test";
-import { DEFAULT_COLORS, apply, welcome } from "../../src/domain";
+import { DEFAULT_COLORS } from "../../src/presentation";
+import { apply } from "../../src/domainClient";
 
 async function focusVertex(page: Page, title: string): Promise<void> {
   await page
     .getByRole("button", { name: `Select ${title}`, exact: true })
     .click();
   await page.getByRole("button", { name: "Focus", exact: true }).click();
+  await expect(
+    page.getByRole("dialog", { name: "Focus session", exact: true }),
+  ).toBeVisible();
 }
 async function openNotes(page: Page, title: string): Promise<void> {
   await page
@@ -92,10 +98,10 @@ async function reconnect(
 }
 test.beforeEach(async ({ page }) => {
   const fixture = apply(
-    welcome(Date.now()),
+    sampleWorkspace(Date.now()),
     {
       type: "edit",
-      id: "welcome",
+      id: "project",
       title: "Test project",
       notes: "",
       estimateMinutes: 0,
@@ -306,7 +312,7 @@ test("vertices reach both canvas edges and the top menu changes color", async ({
   await page.getByRole("button", { name: "Edit graph", exact: true }).click();
   const canvas = await page.locator(".graph-svg").boundingBox();
   if (!canvas) throw new Error("Missing canvas");
-  const body = page.getByTestId("node-fill-welcome");
+  const body = page.getByTestId("node-fill-project");
   for (const x of [canvas.x + 70, canvas.x + canvas.width - 70]) {
     const source = await body.boundingBox();
     if (!source) throw new Error("Missing node");
@@ -339,10 +345,10 @@ test("vertices reach both canvas edges and the top menu changes color", async ({
   await expect(body).toHaveAttribute("fill", "#7c83ff");
   await dialog.getByRole("button", { name: "Done", exact: true }).click();
   const moved = await page
-    .getByTestId("node-welcome")
+    .getByTestId("node-project")
     .getAttribute("transform");
   await page.reload();
-  await expect(page.getByTestId("node-welcome")).toHaveAttribute(
+  await expect(page.getByTestId("node-project")).toHaveAttribute(
     "transform",
     moved ?? "",
   );
@@ -803,10 +809,6 @@ test("clear local data requires confirmation and stays empty after reload", asyn
   await focusVertex(page, "Read & wonder");
   await page.getByRole("button", { name: "Pause & return" }).click();
   await page.evaluate(() => {
-    localStorage.setItem(
-      "hipertrees.workspace.v1",
-      localStorage.getItem("hyperforest.workspace.v1") ?? "",
-    );
     localStorage.setItem("unrelated-data", "keep");
   });
   await expect(
@@ -843,9 +845,6 @@ test("clear local data requires confirmation and stays empty after reload", asyn
     }),
   ).toBeVisible();
   await expect(page.locator(".paused-dock")).toHaveCount(0);
-  expect(
-    await page.evaluate(() => localStorage.getItem("hipertrees.workspace.v1")),
-  ).toBeNull();
   expect(
     await page.evaluate(() => localStorage.getItem("unrelated-data")),
   ).toBe("keep");
@@ -957,12 +956,12 @@ test("multiple colors render, persist, and can return to a single color", async 
     .getByRole("button", { name: "Default color 2", exact: true })
     .click();
   await expect(
-    page.getByTestId("node-colors-welcome").locator("path"),
+    page.getByTestId("node-colors-project").locator("path"),
   ).toHaveCount(2);
   await dialog.getByRole("button", { name: "Done", exact: true }).click();
   await page.reload();
   await expect(
-    page.getByTestId("node-colors-welcome").locator("path"),
+    page.getByTestId("node-colors-project").locator("path"),
   ).toHaveCount(2);
   await page.getByRole("button", { name: "Edit graph", exact: true }).click();
   await page.getByRole("button", { name: "Vertex color", exact: true }).click();
@@ -971,11 +970,11 @@ test("multiple colors render, persist, and can return to a single color", async 
     .getByRole("switch", { name: "Fill interior", exact: true })
     .click();
   await expect(
-    page.getByTestId("node-colors-welcome").locator("path").first(),
+    page.getByTestId("node-colors-project").locator("path").first(),
   ).toHaveAttribute("fill", "none");
   await multiple.click();
   await expect(multiple).toHaveAttribute("aria-checked", "false");
-  await expect(page.getByTestId("node-colors-welcome")).toHaveCount(0);
+  await expect(page.getByTestId("node-colors-project")).toHaveCount(0);
 });
 
 test("adds another hypertree as a persistent live vertex", async ({ page }) => {
@@ -989,7 +988,7 @@ test("adds another hypertree as a persistent live vertex", async ({ page }) => {
     .click();
   await page.getByRole("button", { name: "Edit graph", exact: true }).click();
   await page.getByRole("button", { name: "New vertex", exact: true }).click();
-  await page.getByLabel("Vertex type").selectOption("welcome");
+  await page.getByLabel("Vertex type").selectOption("project");
   await expect(page.getByLabel("Goal name", { exact: true })).toHaveValue(
     "Test project",
   );
@@ -1002,7 +1001,7 @@ test("adds another hypertree as a persistent live vertex", async ({ page }) => {
   ).toBeVisible();
   const linked = await page.evaluate(() =>
     JSON.parse(localStorage.getItem("hyperforest.workspace.v1")!).nodes.find(
-      (node: { linkedTreeId?: string }) => node.linkedTreeId === "welcome",
+      (node: { linkedTreeId?: string }) => node.linkedTreeId === "project",
     ),
   );
   expect(linked).toBeTruthy();
@@ -1053,7 +1052,7 @@ test("reorders tabs and routes linked focus to its source root", async ({
   await page.getByRole("tab", { name: /Container/ }).click();
   await page.getByRole("button", { name: "Edit graph", exact: true }).click();
   await page.getByRole("button", { name: "New vertex", exact: true }).click();
-  await page.getByLabel("Vertex type").selectOption("welcome");
+  await page.getByLabel("Vertex type").selectOption("project");
   await page.getByRole("button", { name: "Add vertex", exact: true }).click();
   await page.getByRole("button", { name: "Focus", exact: true }).click();
   await expect
@@ -1064,13 +1063,13 @@ test("reorders tabs and routes linked focus to its source root", async ({
             ?.nodeId,
       ),
     )
-    .toBe("welcome");
+    .toBe("project");
   await page
     .getByRole("button", { name: "Pause & return", exact: true })
     .click();
 });
 
-test("export includes a readable YAML structure alongside the JSON backup", async ({
+test("export includes the current YAML workspace, structure report, and notes", async ({
   page,
 }) => {
   await page.addInitScript(() =>
@@ -1113,10 +1112,11 @@ test("session history combines date and subject filters and can clear them", asy
       },
     ].map((session) => ({
       ...session,
-      treeId: "welcome",
+      treeId: "project",
       nodeId: "read",
       endedAt: session.startedAt + 60000,
       durationMs: 60000,
+      periods: [{ start: session.startedAt, end: session.startedAt + 60000 }],
     }));
     localStorage.setItem("hyperforest.workspace.v1", JSON.stringify(state));
   });
@@ -1225,7 +1225,7 @@ test("new vertex chooses a parent in its dialog and submits with Add vertex", as
   ).toHaveCount(0);
   await page.getByRole("button", { name: "New vertex", exact: true }).click();
   await expect(page.getByLabel("Parent vertex", { exact: true })).toHaveValue(
-    "welcome",
+    "project",
   );
   await page
     .getByLabel("Parent vertex", { exact: true })
@@ -1496,4 +1496,38 @@ test("desktop uses selected YAML and Markdown storage rather than browser worksp
   await expect
     .poll(() => page.evaluate(() => localStorage.getItem("test.quit")))
     .toBe("yes");
+});
+
+test("dense graph navigation restores labels and connections after the gesture", async ({
+  page,
+}) => {
+  await page.addInitScript(() => {
+    const state = JSON.parse(localStorage.getItem("hyperforest.workspace.v1")!);
+    const template = state.nodes.find(
+      (node: { id: string }) => node.id === "read",
+    );
+    for (let i = 0; i < 151; i++)
+      state.nodes.push({
+        ...template,
+        id: `dense-${i}`,
+        parentId: "project",
+        title: `Dense ${i}`,
+        x: 50 + (i % 15) * 60,
+        y: 180 + Math.floor(i / 15) * 40,
+      });
+    localStorage.setItem("hyperforest.workspace.v1", JSON.stringify(state));
+  });
+  await page.goto("./");
+  const graph = page.locator(".graph");
+  const edge = page.getByTestId("edge-read");
+  const label = page.getByTestId("node-read").locator(".node-title");
+  await expect(edge).toBeVisible();
+  await page
+    .locator(".graph-svg")
+    .dispatchEvent("wheel", { ctrlKey: true, deltaY: -40 });
+  await expect(graph).toHaveClass(/is-navigating/);
+  await expect(edge).toBeHidden();
+  await expect(label).toBeHidden();
+  await expect(edge).toBeVisible();
+  await expect(label).toBeVisible();
 });

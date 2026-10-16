@@ -1,10 +1,10 @@
+import { noteNames, readWorkspace, workspaceFiles } from "./workspaceFiles";
 import { invoke, isTauri } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
-import { parse, stringify } from "yaml";
 import { z } from "zod";
-import { apply, stateSchema } from "./domain";
-import type { Action, State } from "./domain";
-import { notesFilename, structureYaml } from "./export";
+import { apply, validateState } from "./domainClient";
+import type { Action, State } from "./model";
+import { structureYaml, simpleYaml } from "./export";
 import { STORAGE_KEY, Workspace } from "./storage";
 
 export const desktopEnabled = isTauri();
@@ -15,68 +15,15 @@ const loadedSchema = z.object({
   backup_error: z.string().nullable().optional(),
 });
 export type DiskWorkspace = z.infer<typeof loadedSchema>;
-const diskSchema = z
-  .object({
-    nodes: z.array(
-      z.object({ id: z.string(), notesFile: z.string() }).passthrough(),
-    ),
-  })
-  .passthrough();
-
-export function noteNames(state: State): Map<string, string> {
-  const result = new Map<string, string>();
-  const used = new Set<string>();
-  for (const node of state.nodes) {
-    const filename = notesFilename(state, node);
-    const stem = [...filename.slice(0, -3)].slice(0, 45).join("");
-    let hash = 2166136261;
-    for (const character of node.id)
-      hash = Math.imul(hash ^ character.charCodeAt(0), 16777619) >>> 0;
-    let name = node.notesFile ?? `${stem} --${hash.toString(16)}.md`;
-    let suffix = 2;
-    while (used.has(name))
-      name = `${stem} --${hash.toString(16)} (${suffix++}).md`;
-    used.add(name);
-    result.set(node.id, name);
-  }
-  return result;
-}
+export { noteNames } from "./workspaceFiles";
 export function diskState(loaded: DiskWorkspace): State {
-  if (loaded.yaml === null)
-    return { version: 1, trees: [], nodes: [], sessions: [], focus: null };
-  const document = diskSchema.parse(
-    parse(loaded.yaml, { maxAliasCount: 100 }) as unknown,
-  );
-  const nodes = document.nodes.map((node) => {
-    if (
-      node.notesFile.includes("/") ||
-      node.notesFile.includes("\\") ||
-      !node.notesFile.endsWith(".md")
-    )
-      throw new Error("Invalid Markdown path in workspace.yaml.");
-    const notes = loaded.notes[node.notesFile];
-    if (notes === undefined)
-      throw new Error(`Missing Markdown file: notes/${node.notesFile}`);
-    return { ...node, notes };
-  });
-  return stateSchema.parse({ ...document, nodes });
+  return readWorkspace(loaded.yaml, loaded.notes);
 }
-export function diskPayload(
-  state: State,
-  now: number,
-): { yaml: string; structure: string; notes: Record<string, string> } {
-  const names = noteNames(state);
-  const nodes = state.nodes.map((node) => {
-    const { notes, ...rest } = node;
-    void notes;
-    return { ...rest, notesFile: names.get(node.id)! };
-  });
+export function diskPayload(state: State, now: number) {
   return {
-    yaml: stringify({ ...state, nodes }),
+    ...workspaceFiles(state),
     structure: structureYaml(state, now),
-    notes: Object.fromEntries(
-      state.nodes.map((node) => [names.get(node.id)!, node.notes]),
-    ),
+    simple: simpleYaml(state, now),
   };
 }
 class MemoryStorage {
@@ -100,7 +47,7 @@ export class DesktopWorkspace extends Workspace {
   constructor(loaded: DiskWorkspace) {
     const storage = new MemoryStorage();
     storage.setItem(STORAGE_KEY, JSON.stringify(diskState(loaded)));
-    super(storage, Date.now());
+    super(storage);
     this.directory = loaded.directory;
   }
   private enqueue(work: () => Promise<void>): Promise<void> {
@@ -125,7 +72,7 @@ export class DesktopWorkspace extends Workspace {
   }
   override replace(raw: string): Promise<void> {
     return this.enqueue(() =>
-      this.persist(stateSchema.parse(JSON.parse(raw) as unknown)),
+      this.persist(validateState(JSON.parse(raw) as unknown)),
     );
   }
   override clear(): Promise<void> {

@@ -1,6 +1,6 @@
 import { expect, it, vi } from "vitest";
-import { apply } from "../src/domain";
-import type { State } from "../src/domain";
+import { apply } from "../src/domainClient";
+import type { State } from "../src/model";
 const { ipc, listeners } = vi.hoisted(() => ({
   ipc: vi.fn(),
   listeners: new Map<string, (event: { payload: string }) => void>(),

@@ -1,3 +1,5 @@
+#[cfg(feature = "benchmark")]
+mod benchmark;
 mod store;
 use std::{
     path::{Path, PathBuf},
@@ -145,6 +147,10 @@ async fn desktop_open_note(
 }
 #[tauri::command]
 async fn desktop_enable_backups() -> Result<(), String> {
+    #[cfg(feature = "benchmark")]
+    if benchmark::directory().is_some() {
+        return Ok(());
+    }
     let home = std::env::var_os("HOME").ok_or("HOME is unavailable")?;
     let config = std::env::var_os("XDG_CONFIG_HOME")
         .map(PathBuf::from)
@@ -209,11 +215,13 @@ fn main() {
         }
         return;
     }
-    tauri::Builder::default()
+    let builder = tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .setup(|app| {
             let directory = app.path().app_config_dir()?;
             std::fs::create_dir_all(&directory)?;
+            #[cfg(feature = "benchmark")]
+            benchmark::prepare(&directory)?;
             app.manage(Desktop {
                 store: Mutex::new(None),
                 config: directory.join("data-directory"),
@@ -260,6 +268,17 @@ fn main() {
                 api.prevent_close();
                 let _ = window.hide();
             }
+        });
+    #[cfg(feature = "benchmark")]
+    let builder = builder
+        .on_page_load(|webview, payload| {
+            if benchmark::directory().is_some()
+                && payload.event() == tauri::webview::PageLoadEvent::Finished
+            {
+                if let Err(error) = webview.eval(include_str!("benchmark.js")) {
+                    eprintln!("{error}");
+                }
+            }
         })
         .invoke_handler(tauri::generate_handler![
             desktop_tray_state,
@@ -269,8 +288,21 @@ fn main() {
             desktop_select,
             desktop_save,
             desktop_open_note,
-            desktop_enable_backups
-        ])
+            desktop_enable_backups,
+            benchmark::desktop_benchmark_result
+        ]);
+    #[cfg(not(feature = "benchmark"))]
+    let builder = builder.invoke_handler(tauri::generate_handler![
+        desktop_tray_state,
+        desktop_show_window,
+        desktop_quit,
+        desktop_load,
+        desktop_select,
+        desktop_save,
+        desktop_open_note,
+        desktop_enable_backups
+    ]);
+    builder
         .run(tauri::generate_context!())
         .expect("Could not start hyperforest");
 }

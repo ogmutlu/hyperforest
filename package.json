@@ -13,11 +13,17 @@
     "build": "npm run check && vite build",
     "preview": "vite preview --host 0.0.0.0",
     "test:e2e": "npm run build && playwright test",
-    "format": "prettier --write src tests *.ts *.json index.html",
-    "format:check": "prettier --check src tests *.ts *.json index.html",
+    "format": "prettier --write src tests scripts/*.mjs *.ts *.json index.html",
+    "format:check": "prettier --check src tests scripts/*.mjs *.ts *.json index.html",
     "desktop:dev": "tauri dev",
     "desktop:build": "tauri build",
-    "desktop:test": "cargo test --manifest-path src-tauri/Cargo.toml"
+    "desktop:test": "cargo test --manifest-path src-tauri/Cargo.toml",
+    "domain:build": "sh scripts/build-domain.sh",
+    "predev": "npm run domain:build",
+    "pretest": "npm run domain:build",
+    "prebuild": "npm run domain:build",
+    "rust:check": "cargo fmt --all -- --check && cargo clippy --workspace --all-targets -- -D warnings && cargo test --workspace",
+    "desktop:benchmark": "sh scripts/benchmark-desktop.sh"
   },
   "dependencies": {
     "@tauri-apps/api": "^2.12.3",

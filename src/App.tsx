@@ -1,5 +1,8 @@
+import { FocusTimer, TodayCounter } from "./Clock";
 import {
   createContext,
+  useCallback,
+  useMemo,
   useContext,
   useEffect,
   useRef,
@@ -9,29 +12,25 @@ import {
 import type { CSSProperties, FormEvent } from "react";
 import {
   DEFAULT_COLORS,
-  canLinkTree,
   assignedNodeColors,
-  focusElapsed,
+  assignedNodeColor as nodeColor,
   formatTime,
-  formatHms,
   shortTime,
+  filterSessions,
+} from "./presentation";
+import {
+  canLinkTree,
+  focusElapsed,
   subtreeIds,
   nodePath,
   totals,
-  todayTime,
-  filterSessions,
-} from "./domain";
-import type { Action, GoalNode, State } from "./domain";
+} from "./domainClient";
+import type { Action, GoalNode, State } from "./model";
 import { DesktopWorkspace } from "./desktop";
 import { exportArchive, archiveBackup } from "./export";
-import { Graph, nodeColor } from "./Graph";
+import { Graph } from "./Graph";
 import { Icon } from "./icons";
-import {
-  LEGACY_STORAGE_KEY,
-  STORAGE_KEY,
-  transact,
-  Workspace,
-} from "./storage";
+import { STORAGE_KEY, transact, Workspace } from "./storage";
 
 function localDateTime(time: number): string {
   const date = new Date(time);
@@ -354,7 +353,6 @@ export function App({ workspace }: { workspace: Workspace }) {
   const [selected, setSelected] = useState<string | null>(
     state.trees[0]?.id ?? null,
   );
-  const [now, setNow] = useState(Date.now());
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [dialog, setDialog] = useState<
@@ -400,40 +398,44 @@ export function App({ workspace }: { workspace: Workspace }) {
     ) ?? state.nodes.find((item) => item.id === tree?.id);
   const focusNode = state.nodes.find((item) => item.id === state.focus?.nodeId);
   const focus = state.focus;
-  const time = totals(state, tree?.id ?? "", now);
-  const today = todayTime(state, now);
-  const historySessions = filterSessions(
-    state.sessions,
-    historyFrom,
-    historyTo,
-    historySubject,
+  const activeTreeId = tree?.id ?? "";
+  const time = useMemo(
+    () => totals(state, activeTreeId, Date.now()),
+    [state, activeTreeId],
+  );
+  const historySessions = useMemo(
+    () =>
+      filterSessions(state.sessions, historyFrom, historyTo, historySubject),
+    [state.sessions, historyFrom, historyTo, historySubject],
   );
   const children = state.nodes.filter(
     (item) =>
       item.parentId === node?.id &&
       (item.finishedAt === undefined || tree?.showFinished),
   );
-  const color = node ? nodeColor(state, node) : "#dfc491";
-  const colors = node ? assignedNodeColors(state.nodes, node) : [color];
-  const run = async (action: Action): Promise<boolean> => {
-    setBusy(true);
-    try {
-      await transact(() => workspace.commit(action, Date.now()));
-      setError("");
-      return true;
-    } catch (exception: unknown) {
-      setError(
-        exception instanceof Error
-          ? exception.message
-          : "Could not save your changes.",
-      );
-      return false;
-    } finally {
-      setBusy(false);
-    }
-  };
+  const color = node ? nodeColor(node) : "#dfc491";
+  const colors = node ? assignedNodeColors(node) : [color];
+  const run = useCallback(
+    async (action: Action): Promise<boolean> => {
+      setBusy(true);
+      try {
+        await transact(() => workspace.commit(action, Date.now()));
+        setError("");
+        return true;
+      } catch (exception: unknown) {
+        setError(
+          exception instanceof Error
+            ? exception.message
+            : "Could not save your changes.",
+        );
+        return false;
+      } finally {
+        setBusy(false);
+      }
+    },
+    [workspace],
+  );
   useEffect(() => {
-    const timer = setInterval(() => setNow(Date.now()), 250);
     const refresh = (): void => {
       try {
         workspace.refresh();
@@ -447,7 +449,6 @@ export function App({ workspace }: { workspace: Workspace }) {
     };
     window.addEventListener("storage", refresh);
     return () => {
-      clearInterval(timer);
       window.removeEventListener("storage", refresh);
     };
   }, [workspace]);
@@ -470,16 +471,15 @@ export function App({ workspace }: { workspace: Workspace }) {
     const timer = setInterval(updateTitle, 1000);
     return () => clearInterval(timer);
   }, [running, focus]);
-  const start = async (
-    id: string,
-    point: { x: number; y: number },
-  ): Promise<void> => {
-    setOrigin(point);
-    if (await run({ type: "start", id })) {
-      setSelected(id);
-      setNow(Date.now());
-    }
-  };
+  const start = useCallback(
+    async (id: string, point: { x: number; y: number }): Promise<void> => {
+      setOrigin(point);
+      if (await run({ type: "start", id })) {
+        setSelected(id);
+      }
+    },
+    [run],
+  );
   const create = async (event: FormEvent): Promise<void> => {
     event.preventDefault();
     const id = crypto.randomUUID();
@@ -513,9 +513,7 @@ export function App({ workspace }: { workspace: Workspace }) {
       return;
     setBusy(true);
     try {
-      const raw = file.name.toLowerCase().endsWith(".zip")
-        ? archiveBackup(new Uint8Array(await file.arrayBuffer()))
-        : await file.text();
+      const raw = archiveBackup(new Uint8Array(await file.arrayBuffer()));
       await transact(() => workspace.replace(raw));
       setError("");
       setSelected(null);
@@ -620,7 +618,7 @@ export function App({ workspace }: { workspace: Workspace }) {
               ref={importInput}
               hidden
               type="file"
-              accept="application/json,application/zip,.json,.zip"
+              accept="application/zip,.zip"
               aria-label="Import backup"
               onChange={(event) => {
                 void importFile(event.target.files?.[0]);
@@ -684,7 +682,9 @@ export function App({ workspace }: { workspace: Workspace }) {
                 <div className="focus-control">
                   <div className="today-time" data-testid="today-time">
                     <small>TODAY</small>
-                    <span className="today-counter">{formatHms(today)}</span>
+                    <span className="today-counter">
+                      {<TodayCounter state={state} />}
+                    </span>
                   </div>
                   <button
                     className="primary-button start-button"
@@ -789,7 +789,7 @@ export function App({ workspace }: { workspace: Workspace }) {
                     >
                       <span
                         className="child-dot"
-                        style={{ background: nodeColor(state, child) }}
+                        style={{ background: nodeColor(child) }}
                       />
                       <span>{child.title}</span>
                       <small>{shortTime(time.get(child.id) ?? 0)}</small>
@@ -853,7 +853,7 @@ export function App({ workspace }: { workspace: Workspace }) {
               aria-label="Focus session"
               style={
                 {
-                  "--node-color": nodeColor(state, focusNode),
+                  "--node-color": nodeColor(focusNode),
                   "--origin-x": `${origin.x}px`,
                   "--origin-y": `${origin.y}px`,
                 } as CSSProperties
@@ -869,7 +869,7 @@ export function App({ workspace }: { workspace: Workspace }) {
                   <span className="focus-star">✦</span>
                   <h2>{focusNode.title}</h2>
                   <div className="focus-timer" data-testid="focus-timer">
-                    {formatTime(focusElapsed(focus, now))}
+                    {<FocusTimer focus={focus} />}
                   </div>
                   <p>
                     {focus.title === "General"
@@ -910,7 +910,7 @@ export function App({ workspace }: { workspace: Workspace }) {
                 <span className="paused-dot" />
                 <div>
                   <strong>{focusNode.title}</strong>
-                  <small>Paused · {formatTime(focusElapsed(focus, now))}</small>
+                  <small>Paused · {<FocusTimer focus={focus} />}</small>
                 </div>
                 <button
                   className="primary-button"
@@ -1567,7 +1567,7 @@ export function App({ workspace }: { workspace: Workspace }) {
                     required
                     value={manualStart}
                     disabled={busy}
-                    max={localDateTime(now)}
+                    max={localDateTime(Date.now())}
                     onChange={(event) => setManualStart(event.target.value)}
                   />
                 </label>
@@ -1771,9 +1771,7 @@ export function Recovery({ error }: { error: unknown }) {
         onClick={() =>
           download(
             "hyperforest-recovery.json",
-            localStorage.getItem(STORAGE_KEY) ??
-              localStorage.getItem(LEGACY_STORAGE_KEY) ??
-              "",
+            localStorage.getItem(STORAGE_KEY) ?? "",
           )
         }
       >
@@ -1786,7 +1784,6 @@ export function Recovery({ error }: { error: unknown }) {
             confirm("Reset local storage? Download your stored data first.")
           ) {
             localStorage.removeItem(STORAGE_KEY);
-            localStorage.removeItem(LEGACY_STORAGE_KEY);
             location.reload();
           }
         }}

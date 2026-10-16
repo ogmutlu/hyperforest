@@ -7,3 +7,6 @@ playwright-report/
 
 src-tauri/target/
 src-tauri/gen/
+
+/target/
+/src/generated/

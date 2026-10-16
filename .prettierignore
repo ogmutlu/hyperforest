@@ -1,0 +1,5 @@
+src/generated/
+dist/
+target/
+src-tauri/
+node_modules/

@@ -1,19 +1,21 @@
+import { sampleWorkspace } from "./sampleWorkspace";
 import { describe, expect, it } from "vitest";
 import {
   apply,
-  formatHms,
-  DEFAULT_COLORS,
-  assignedNodeColors,
   focusElapsed,
-  stateSchema,
+  validateState,
   totals,
   todayTotals,
   todayTime,
+} from "../src/domainClient";
+import {
+  formatHms,
+  DEFAULT_COLORS,
+  assignedNodeColors,
   filterSessions,
-  welcome,
-} from "../src/domain";
-import type { State } from "../src/domain";
-import { LEGACY_STORAGE_KEY, STORAGE_KEY, Workspace } from "../src/storage";
+} from "../src/presentation";
+import type { State } from "../src/model";
+import { STORAGE_KEY, Workspace } from "../src/storage";
 
 const empty = (): State => ({
   version: 1,
@@ -50,10 +52,10 @@ class MemoryStorage {
       STORAGE_KEY,
       JSON.stringify(
         apply(
-          welcome(1000),
+          sampleWorkspace(1000),
           {
             type: "edit",
-            id: "welcome",
+            id: "project",
             title: "Test project",
             notes: "",
             estimateMinutes: 0,
@@ -77,19 +79,17 @@ class MemoryStorage {
   }
 }
 
-it("clears workspace and legacy data without touching other storage", () => {
+it("clears workspace without touching other storage", () => {
   const storage = new MemoryStorage();
-  storage.setItem(LEGACY_STORAGE_KEY, JSON.stringify(example()));
   storage.setItem("other-app", "keep");
-  const workspace = new Workspace(storage, 1000);
-  const otherTab = new Workspace(storage, 1000);
+  const workspace = new Workspace(storage);
+  const otherTab = new Workspace(storage);
   workspace.clear();
   expect(workspace.getSnapshot()).toEqual(empty());
-  expect(storage.getItem(LEGACY_STORAGE_KEY)).toBeNull();
   expect(storage.getItem("other-app")).toBe("keep");
   otherTab.refresh();
   expect(otherTab.getSnapshot()).toEqual(empty());
-  expect(new Workspace(storage, 2000).getSnapshot()).toEqual(empty());
+  expect(new Workspace(storage).getSnapshot()).toEqual(empty());
 });
 
 describe("focus accounting", () => {
@@ -126,7 +126,7 @@ describe("focus accounting", () => {
       state.nodes.find((node) => node.id === "leaf")?.color,
     );
     expect(
-      stateSchema.parse(JSON.parse(JSON.stringify(state))).trees[0]?.pedantic,
+      validateState(JSON.parse(JSON.stringify(state))).trees[0]?.pedantic,
     ).toBe(true);
   });
   it("enforces connected color classes in pedantic forests", () => {
@@ -166,7 +166,7 @@ describe("focus accounting", () => {
       ),
     ).toThrow("must be connected");
     expect(() =>
-      stateSchema.parse({
+      validateState({
         ...state,
         nodes: state.nodes.map((node) =>
           node.id === "branch" ? { ...node, parentId: null } : node,
@@ -206,9 +206,9 @@ describe("focus accounting", () => {
     state = apply(state, { type: "move", id: "leaf", x: 200, y: 450 }, 7000);
     state = apply(state, { type: "layout", treeId: "root" }, 8000);
     expect(
-      stateSchema
-        .parse(JSON.parse(JSON.stringify(state)))
-        .nodes.find((node) => node.id === "leaf")?.parentId,
+      validateState(JSON.parse(JSON.stringify(state))).nodes.find(
+        (node) => node.id === "leaf",
+      )?.parentId,
     ).toBeNull();
     state = apply(
       state,
@@ -277,7 +277,7 @@ describe("focus accounting", () => {
       { type: "complete", id: "branch", sessionId: "branch-session" },
       130000,
     );
-    state = stateSchema.parse(JSON.parse(JSON.stringify(state)));
+    state = validateState(JSON.parse(JSON.stringify(state)));
     expect(totals(state, "root", 140000)).toEqual(
       new Map([
         ["root", 90000],
@@ -373,6 +373,7 @@ describe("focus accounting", () => {
           startedAt: 999,
           endedAt: 2000,
           durationMs: 1000,
+          periods: [{ start: 1000, end: 2000 }],
         },
       ],
     };
@@ -398,26 +399,15 @@ describe("focus accounting", () => {
   });
 });
 describe("validated persistence", () => {
-  it("migrates the previous app storage without losing work", () => {
-    const storage = new MemoryStorage();
-    const previous = storage.getItem(STORAGE_KEY);
-    storage.values.clear();
-    if (!previous) throw new Error("Missing fixture");
-    storage.setItem(LEGACY_STORAGE_KEY, previous);
-    const migrated = new Workspace(storage, 2000).getSnapshot();
-    expect(migrated.nodes).toHaveLength(9);
-    expect(storage.getItem(STORAGE_KEY)).toBe(JSON.stringify(migrated));
-    expect(storage.getItem(LEGACY_STORAGE_KEY)).toBe(previous);
-  });
   it("persists root movement, isolated nodes and validated fill colors", () => {
     const storage = new MemoryStorage();
-    const workspace = new Workspace(storage, 1000);
-    workspace.commit({ type: "move", id: "welcome", x: 220, y: 300 }, 2000);
+    const workspace = new Workspace(storage);
+    workspace.commit({ type: "move", id: "project", x: 220, y: 300 }, 2000);
     workspace.commit(
       {
         type: "isolate",
         id: "isolated",
-        treeId: "welcome",
+        treeId: "project",
         title: "Independent",
       },
       3000,
@@ -427,8 +417,8 @@ describe("validated persistence", () => {
       { type: "add", id: "child", parentId: "isolated", title: "Child" },
       5000,
     );
-    const reloaded = new Workspace(storage, 6000).getSnapshot();
-    expect(reloaded.nodes.find((node) => node.id === "welcome")).toMatchObject({
+    const reloaded = new Workspace(storage).getSnapshot();
+    expect(reloaded.nodes.find((node) => node.id === "project")).toMatchObject({
       x: 220,
       y: 300,
     });
@@ -450,28 +440,9 @@ describe("validated persistence", () => {
         ?.color,
     ).toBe("#80c9bc");
   });
-  it("starts empty and removes only untouched legacy starter trees", () => {
-    const storage = new MemoryStorage();
-    storage.values.clear();
-    expect(new Workspace(storage, 1000).getSnapshot().trees).toEqual([]);
-    storage.setItem(STORAGE_KEY, JSON.stringify(welcome(1000)));
-    expect(new Workspace(storage, 2000).getSnapshot().trees).toEqual([]);
-    let used = apply(welcome(1000), { type: "start", id: "read" }, 2000);
-    used = apply(used, { type: "finish", id: "saved" }, 3000);
-    storage.setItem(STORAGE_KEY, JSON.stringify(used));
-    expect(new Workspace(storage, 4000).getSnapshot().sessions).toHaveLength(1);
-    expect(new Workspace(storage, 4000).getSnapshot().trees).toHaveLength(1);
-    expect(
-      apply(
-        used,
-        { type: "move", id: "welcome", x: 100, y: 200 },
-        4000,
-      ).nodes.find((node) => node.id === "welcome"),
-    ).toMatchObject({ x: 100, y: 200 });
-  });
   it("retains drag positions, notes and a running focus across reloads", () => {
     const storage = new MemoryStorage();
-    const workspace = new Workspace(storage, 1000);
+    const workspace = new Workspace(storage);
     workspace.commit({ type: "move", id: "read", x: 222, y: 333 }, 2000);
     workspace.commit(
       {
@@ -484,7 +455,7 @@ describe("validated persistence", () => {
       3000,
     );
     workspace.commit({ type: "start", id: "read" }, 4000);
-    const reloaded = new Workspace(storage, 5000).getSnapshot();
+    const reloaded = new Workspace(storage).getSnapshot();
     expect(reloaded.nodes.find((node) => node.id === "read")).toMatchObject({
       x: 222,
       y: 333,
@@ -494,7 +465,7 @@ describe("validated persistence", () => {
   });
   it("keeps the previous visible state on failed writes", () => {
     const storage = new MemoryStorage();
-    const workspace = new Workspace(storage, 1000);
+    const workspace = new Workspace(storage);
     const previous = workspace.getSnapshot();
     storage.fail = true;
     expect(() =>
@@ -505,11 +476,11 @@ describe("validated persistence", () => {
   it("never silently resets corrupted data or imports cycles", () => {
     const storage = new MemoryStorage();
     storage.setItem(STORAGE_KEY, "{broken");
-    expect(() => new Workspace(storage, 1000)).toThrow();
+    expect(() => new Workspace(storage)).toThrow();
     expect(storage.getItem(STORAGE_KEY)).toBe("{broken");
     const state = example();
     expect(() =>
-      stateSchema.parse({
+      validateState({
         ...state,
         nodes: state.nodes.map((node) =>
           node.id === "branch" ? { ...node, parentId: "leaf" } : node,
@@ -519,8 +490,8 @@ describe("validated persistence", () => {
   });
   it("refreshes another tab before mutating without losing its changes", () => {
     const storage = new MemoryStorage();
-    const first = new Workspace(storage, 1000),
-      second = new Workspace(storage, 1000);
+    const first = new Workspace(storage),
+      second = new Workspace(storage);
     first.commit(
       {
         type: "edit",
@@ -539,8 +510,8 @@ describe("validated persistence", () => {
   });
   it("preserves another tab's notes when an older edit form is submitted", () => {
     const storage = new MemoryStorage();
-    const first = new Workspace(storage, 1000),
-      second = new Workspace(storage, 1000);
+    const first = new Workspace(storage),
+      second = new Workspace(storage);
     const original = first
       .getSnapshot()
       .nodes.find((node) => node.id === "read");
@@ -573,7 +544,7 @@ describe("validated persistence", () => {
     ).toBe("New notes");
   });
   it("creates a valid, fully laid-out example", () => {
-    expect(stateSchema.parse(welcome(1000)).nodes).toHaveLength(9);
+    expect(validateState(sampleWorkspace(1000)).nodes).toHaveLength(9);
   });
 });
 
@@ -599,7 +570,7 @@ it("new hypertrees default to non-pedantic and enforce connectivity when enabled
     apply(state, { type: "connect", id: "leaf", parentId: null }, 1003),
   ).toThrow("must be connected");
   expect(() =>
-    stateSchema.parse({
+    validateState({
       ...state,
       nodes: state.nodes.map((node) =>
         node.id === "leaf" ? { ...node, parentId: null } : node,
@@ -624,26 +595,19 @@ it("new hypertrees default to non-pedantic and enforce connectivity when enabled
   expect(state.trees[0]?.pedantic).toBe(true);
 });
 
-it("migrates previously pedantic disconnected storage without weakening imports", () => {
-  let state = apply(
+it("rejects invalid current storage without modifying it", () => {
+  const state = apply(
     example(),
-    { type: "color", id: "leaf", color: "#ef6a75" },
+    { type: "connect", id: "leaf", parentId: null },
     2000,
   );
-  state = apply(state, { type: "connect", id: "leaf", parentId: null }, 2001);
-  const legacy = {
+  const invalid = {
     ...state,
     trees: state.trees.map((tree) => ({ ...tree, pedantic: true })),
   };
   const storage = new MemoryStorage();
-  storage.setItem(STORAGE_KEY, JSON.stringify(legacy));
-  const ws = new Workspace(storage, 2002);
-  expect(ws.getSnapshot().trees[0]?.pedantic).toBe(false);
-  expect(ws.getSnapshot().nodes).toEqual(state.nodes);
-  expect(() => ws.replace(JSON.stringify(legacy))).toThrow("must be connected");
-  const invalid = { ...legacy, version: 99 };
   storage.setItem(STORAGE_KEY, JSON.stringify(invalid));
-  expect(() => new Workspace(storage, 2003)).toThrow();
+  expect(() => new Workspace(storage)).toThrow("must be connected");
   expect(storage.getItem(STORAGE_KEY)).toBe(JSON.stringify(invalid));
 });
 
@@ -659,12 +623,9 @@ describe("multiple vertex colors", () => {
       { type: "colors", id: "branch", colors: ["#ABCDEF", "#123456"] },
       2001,
     );
-    state = stateSchema.parse(JSON.parse(JSON.stringify(state)));
+    state = validateState(JSON.parse(JSON.stringify(state)));
     expect(
-      assignedNodeColors(
-        state.nodes,
-        state.nodes.find((node) => node.id === "branch")!,
-      ),
+      assignedNodeColors(state.nodes.find((node) => node.id === "branch")!),
     ).toEqual(["#abcdef", "#123456"]);
     expect(() =>
       apply(state, { type: "colors", id: "branch", colors: [] }, 2002),
@@ -682,10 +643,7 @@ describe("multiple vertex colors", () => {
       2003,
     );
     expect(
-      assignedNodeColors(
-        state.nodes,
-        state.nodes.find((node) => node.id === "branch")!,
-      ),
+      assignedNodeColors(state.nodes.find((node) => node.id === "branch")!),
     ).toEqual(["#abcdef"]);
   });
   it("enforces connected overlapping hyperedges and inherits all parent colors", () => {
@@ -730,10 +688,7 @@ describe("multiple vertex colors", () => {
       1004,
     );
     expect(
-      assignedNodeColors(
-        state.nodes,
-        state.nodes.find((node) => node.id === "leaf")!,
-      ),
+      assignedNodeColors(state.nodes.find((node) => node.id === "leaf")!),
     ).toEqual(["#abcdef", "#123456"]);
     expect(() =>
       apply(state, { type: "colors", id: "middle", colors: ["#abcdef"] }, 1005),
@@ -804,10 +759,7 @@ it("assigns root children successive palette colors and descendants inherit in e
       1005,
     );
     expect(
-      assignedNodeColors(
-        state.nodes,
-        state.nodes.find((node) => node.id === "grandchild")!,
-      ),
+      assignedNodeColors(state.nodes.find((node) => node.id === "grandchild")!),
     ).toEqual([DEFAULT_COLORS[1], "#123456"]);
   }
 });
@@ -824,7 +776,7 @@ it("linked hypertrees aggregate live and saved time, persist, and reject cycles"
   expect(totals(state, "a", 5000).get("link")).toBe(3000);
   expect(totals(state, "a", 6000).get("a")).toBe(4000);
   state = apply(state, { type: "finish", id: "saved" }, 6000);
-  state = stateSchema.parse(JSON.parse(JSON.stringify(state)));
+  state = validateState(JSON.parse(JSON.stringify(state)));
   expect(totals(state, "a", 9000).get("link")).toBe(4000);
   expect(() =>
     apply(
@@ -902,7 +854,7 @@ it("tab ordering persists without changing graph data", () => {
   state = apply(state, { type: "create", id: "b", title: "B" }, 1001);
   const nodes = state.nodes;
   state = apply(state, { type: "reorderTree", id: "b", direction: -1 }, 1002);
-  state = stateSchema.parse(JSON.parse(JSON.stringify(state)));
+  state = validateState(JSON.parse(JSON.stringify(state)));
   expect(state.trees.map((tree) => tree.id)).toEqual(["b", "a"]);
   expect(state.nodes).toEqual(nodes);
 });
@@ -1014,19 +966,19 @@ it("preserves finished notes, frees names and colors, and excludes ghosts from p
     1006,
   );
   expect(
-    stateSchema.parse(JSON.parse(JSON.stringify(state))).trees[0]?.showFinished,
+    validateState(JSON.parse(JSON.stringify(state))).trees[0]?.showFinished,
   ).toBe(true);
 });
 
-it("does not discard the legacy demo after a vertex has been finished", () => {
+it("preserves finished vertices across reloads", () => {
   const storage = new MemoryStorage();
   const state = apply(
-    welcome(1000),
+    sampleWorkspace(1000),
     { type: "complete", id: "read", sessionId: "unused" },
     2000,
   );
   storage.setItem(STORAGE_KEY, JSON.stringify(state));
-  const workspace = new Workspace(storage, 3000);
+  const workspace = new Workspace(storage);
   expect(
     workspace.getSnapshot().nodes.find((node) => node.id === "read")
       ?.finishedAt,

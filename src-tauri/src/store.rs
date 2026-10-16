@@ -22,6 +22,7 @@ pub struct Loaded {
 pub struct Save {
     pub yaml: String,
     pub structure: String,
+    pub simple: String,
     pub notes: BTreeMap<String, String>,
 }
 
@@ -172,6 +173,10 @@ impl Store {
             &self.directory.join("structure.yaml"),
             request.structure.as_bytes(),
         )?;
+        atomic_write(
+            &self.directory.join("simple.yaml"),
+            request.simple.as_bytes(),
+        )?;
         if self.last_yaml.as_ref() != Some(&request.yaml) {
             atomic_write(&path, request.yaml.as_bytes())?;
         }
@@ -194,17 +199,20 @@ impl Store {
                 == fs::read(self.directory.join("workspace.yaml")).map_err(error)?
             && notes(&target.join("notes"))? == notes(&self.directory.join("notes"))?
         {
-            return atomic_write(
-                &target.join("structure.yaml"),
-                &fs::read(self.directory.join("structure.yaml")).map_err(error)?,
-            );
+            for name in ["structure.yaml", "simple.yaml"] {
+                atomic_write(
+                    &target.join(name),
+                    &fs::read(self.directory.join(name)).map_err(error)?,
+                )?;
+            }
+            return Ok(());
         }
         let stage = backups.join(format!(".pending-{date}"));
         if stage.exists() {
             fs::remove_dir_all(&stage).map_err(error)?;
         }
         fs::create_dir_all(stage.join("notes")).map_err(error)?;
-        for name in ["workspace.yaml", "structure.yaml"] {
+        for name in ["workspace.yaml", "structure.yaml", "simple.yaml"] {
             atomic_write(
                 &stage.join(name),
                 &fs::read(self.directory.join(name)).map_err(error)?,
@@ -261,6 +269,7 @@ mod tests {
         Save {
             yaml: "version: 1\n".into(),
             structure: "hypertrees: []\n".into(),
+            simple: "hypertrees: []\n".into(),
             notes: BTreeMap::from([("Work - Read.md".into(), text.into())]),
         }
     }
@@ -302,6 +311,29 @@ mod tests {
         let loaded = store.save(save("next")).unwrap();
         assert!(loaded.backup_error.is_some());
         assert_eq!(loaded.notes["Work - Read.md"], "next");
+        drop(store);
+        fs::remove_dir_all(path).unwrap();
+    }
+    #[test]
+    fn derived_reports_refresh_without_changing_workspace_metadata() {
+        let path = folder();
+        let mut store = Store::open(path.clone()).unwrap();
+        store.save(save("notes")).unwrap();
+        let mut request = save("notes");
+        request.structure = "detailed: refreshed\n".into();
+        request.simple = "readable: refreshed\n".into();
+        store.save(request).unwrap();
+        let date = Local::now().format("%Y-%m-%d").to_string();
+        for name in ["structure.yaml", "simple.yaml"] {
+            assert_eq!(
+                fs::read(path.join(name)).unwrap(),
+                fs::read(path.join("backups").join(&date).join(name)).unwrap()
+            );
+        }
+        assert_eq!(
+            fs::read_to_string(path.join("simple.yaml")).unwrap(),
+            "readable: refreshed\n"
+        );
         drop(store);
         fs::remove_dir_all(path).unwrap();
     }
