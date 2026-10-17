@@ -14,6 +14,9 @@ candidate theorems.
 
 ## Start
 
+Linux x86-64 desktop packages are available from [GitHub Releases](https://github.com/ogmutlu/hyperforest/releases).
+Download the `.deb` and install it with `sudo apt install ./hyperforest_1.0.0_amd64.deb`.
+
 Requires Node 24+, npm, Rust/Cargo, and these one-time tools:
 
 ```sh

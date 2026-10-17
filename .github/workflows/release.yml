@@ -1,0 +1,64 @@
+name: Desktop release
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  deb:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+      - name: Check release version
+        run: |
+          node --input-type=module <<'JS'
+          import fs from 'node:fs';
+          const version = JSON.parse(fs.readFileSync('package.json')).version;
+          const tauri = JSON.parse(fs.readFileSync('src-tauri/tauri.conf.json')).version;
+          const cargo = fs.readFileSync('src-tauri/Cargo.toml', 'utf8').match(/^version = "([^"]+)"/m)?.[1];
+          if (process.env.GITHUB_REF !== `refs/tags/v${version}` || tauri !== version || cargo !== version) {
+            throw new Error('Run from a version tag matching package.json, Tauri, and Cargo');
+          }
+          JS
+      - name: Install Linux build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev build-essential curl wget file libxdo-dev libssl-dev librsvg2-dev libayatana-appindicator3-dev
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            . -> target
+            src-tauri -> target
+      - run: cargo install wasm-bindgen-cli --version 0.2.114 --locked
+      - run: npm ci
+      - run: npm run rust:check
+      - run: npm run format:check
+      - run: npm test
+      - run: npm run desktop:test
+      - run: npm run desktop:build -- --bundles deb
+      - name: Check package and create checksum
+        working-directory: src-tauri/target/release/bundle/deb
+        run: |
+          dpkg-deb --info ./*.deb
+          sha256sum ./*.deb > SHA256SUMS
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" \
+            src-tauri/target/release/bundle/deb/*.deb \
+            src-tauri/target/release/bundle/deb/SHA256SUMS \
+            --verify-tag --title "Hyperforest $GITHUB_REF_NAME" \
+            --notes-file .github/release-notes.md
