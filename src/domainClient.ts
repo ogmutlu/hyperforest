@@ -107,3 +107,23 @@ export function todayTotals(
 export function todayTime(state: State, now: number): number {
   return domain(state).time_between(midnight(now), now);
 }
+
+export interface HistoryStatistics {
+  totalMs: number;
+  averageDayMs: number;
+  averageActiveDayMs: number;
+  averageSessionMs: number;
+  longestSessionMs: number;
+  activeDays: number;
+  dailyMs: number[];
+  sessions: { index: number; durationMs: number }[];
+}
+export function historyStatistics(
+  state: State,
+  selected: number[],
+  boundaries: number[],
+): HistoryStatistics {
+  return JSON.parse(
+    domain(state).history(JSON.stringify(selected), JSON.stringify(boundaries)),
+  ) as HistoryStatistics;
+}

@@ -5,13 +5,25 @@ import { DesktopSaveStatus } from "./DesktopSaveStatus";
 import { chooseDesktop, loadDesktop } from "./desktop";
 import type { DesktopWorkspace } from "./desktop";
 
+const ZOOM_KEY = "hyperforest.interface-zoom";
+function savedZoom(): number {
+  try {
+    const value = Number(localStorage.getItem(ZOOM_KEY));
+    return Number.isFinite(value) && value >= 0.5 && value <= 2
+      ? Math.round(value * 10) / 10
+      : 1;
+  } catch {
+    return 1;
+  }
+}
+
 export function DesktopApp() {
   const [workspace, setWorkspace] = useState<DesktopWorkspace | null>(null);
   const [ready, setReady] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
-  const [interfaceZoom, setInterfaceZoom] = useState(1);
-  const requestedZoom = useRef(1);
+  const [interfaceZoom, setInterfaceZoom] = useState(savedZoom);
+  const requestedZoom = useRef(interfaceZoom);
   const zoomQueue = useRef(Promise.resolve());
   const zoom = useCallback((value: number) => {
     const next = Math.max(0.5, Math.min(2, Math.round(value * 10) / 10));
@@ -21,11 +33,15 @@ export function DesktopApp() {
         const { getCurrentWebview } = await import("@tauri-apps/api/webview");
         await getCurrentWebview().setZoom(next);
         setInterfaceZoom(next);
+        localStorage.setItem(ZOOM_KEY, String(next));
       })
       .catch((reason: unknown) => {
         setError(String(reason));
       });
   }, []);
+  useEffect(() => {
+    zoom(requestedZoom.current);
+  }, [zoom]);
   useEffect(() => {
     const key = (event: KeyboardEvent): void => {
       if (!event.ctrlKey && !event.metaKey) return;

@@ -109,6 +109,26 @@ Checks: `npm test`, `npm run test:e2e`, and `npm run desktop:test`.
 Use the − / percentage / + controls above the app to zoom the entire interface.
 Keyboard shortcuts are Ctrl+plus, Ctrl+minus, and Ctrl+0 to reset. Ctrl+scroll on
 menus also changes interface zoom; Ctrl+scroll over the graph changes its camera.
+The last successfully applied interface zoom is restored on startup. This is a
+local interface preference in the WebView's persistent storage, independent of
+the chosen workspace and its YAML/ZIP backups. Invalid stored values use 100%.
+
+The history icon to the right of Today opens the desktop ledger. It has compact
+table rows, 100 sessions per page, and independent scrolling. All totals and
+averages use the Rust domain, including clipping focus periods at the selected
+local date boundaries. Pauses and unsaved focus do not enter history statistics.
+The daily average includes every selected calendar day, even days without focus.
+The active-day average counts only days with recorded focus. Both endpoints are
+inclusive; blank endpoints mean first saved session through today. A session
+crossing midnight can appear in either day; **Focus in range** shows its clipped
+duration, while **Full session** preserves its complete recorded duration.
+Use each date field's calendar button to choose a day, or type `YYYY-MM-DD`.
+The same calendar serves history filters and manual session dates. It supports
+month/year selection, arrow keys, Page Up/Down (Shift for a year), and Alt+Down
+from the input. Escape closes the calendar first, leaving history open.
+The last valid From/To selection is remembered when history is reopened and
+across app restarts. Clear filters resets it to the all-time range. Like zoom,
+this is a local interface preference and is not included in workspace backups.
 
 The tray icon adds a green play badge while focusing and an amber pause badge
 while paused. With no session it shows the ordinary logo. The menu groups the

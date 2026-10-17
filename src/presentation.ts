@@ -1,24 +1,6 @@
 /** Formatting and local-calendar search; no state transitions. */
-import type { State, GoalNode } from "./model";
+import type { GoalNode } from "./model";
 
-export function filterSessions(
-  sessions: State["sessions"],
-  from: string,
-  to: string,
-  subject: string,
-): State["sessions"] {
-  const query = subject.trim().toLocaleLowerCase();
-  return sessions.filter((session) => {
-    const date = new Date(session.startedAt);
-    const day = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
-    return (
-      (!from || day >= from) &&
-      (!to || day <= to) &&
-      (!query ||
-        `${session.title} ${session.group}`.toLocaleLowerCase().includes(query))
-    );
-  });
-}
 export function formatTime(ms: number): string {
   const seconds = Math.floor(Math.max(0, ms) / 1000);
   return `${Math.floor(seconds / 3600)

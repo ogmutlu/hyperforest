@@ -1,4 +1,5 @@
 import { TodayCounter } from "./Clock";
+import { SessionHistory } from "./SessionHistory";
 import { FocusSession } from "./FocusSession";
 import { ActionMenu } from "./ActionMenu";
 import {
@@ -18,7 +19,6 @@ import {
   assignedNodeColor as nodeColor,
   formatTime,
   shortTime,
-  filterSessions,
 } from "./presentation";
 import {
   canLinkTree,
@@ -34,12 +34,6 @@ import { Graph } from "./Graph";
 import { Icon } from "./icons";
 import { STORAGE_KEY, transact, Workspace } from "./storage";
 
-function localDateTime(time: number): string {
-  const date = new Date(time);
-  return new Date(time - date.getTimezoneOffset() * 60000)
-    .toISOString()
-    .slice(0, 16);
-}
 function download(name: string, text: string, type = "application/json"): void {
   const url = URL.createObjectURL(new Blob([text], { type }));
   const link = document.createElement("a");
@@ -92,20 +86,27 @@ function Dialog({
   children,
   close,
   label,
+  className = "",
 }: {
   children: React.ReactNode;
   close: () => void;
   label: string;
+  className?: string;
 }) {
   const ref = useRef<HTMLDialogElement>(null);
   const error = useContext(ErrorContext);
   useEffect(() => {
     ref.current?.showModal();
+    const previous = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = previous;
+    };
   }, []);
   return (
     <dialog
       ref={ref}
-      className="dialog"
+      className={`dialog ${className}`}
       aria-label={label}
       onCancel={(event) => {
         event.preventDefault();
@@ -381,17 +382,6 @@ export function App({
   const [newParent, setNewParent] = useState("");
   const [newName, setNewName] = useState("");
   const [linkedTreeId, setLinkedTreeId] = useState("");
-  const [historyFrom, setHistoryFrom] = useState("");
-  const [historyTo, setHistoryTo] = useState("");
-  const [historySubject, setHistorySubject] = useState("");
-  const [changingHistory, setChangingHistory] = useState(false);
-  const [addingSession, setAddingSession] = useState(false);
-  const [manualNode, setManualNode] = useState("");
-  const [manualStart, setManualStart] = useState("");
-  const [manualHours, setManualHours] = useState("0");
-  const [manualMinutes, setManualMinutes] = useState("30");
-  const [manualSeconds, setManualSeconds] = useState("0");
-  const [deletingSession, setDeletingSession] = useState<string | null>(null);
   const [customColor, setCustomColor] = useState("#dfc491");
   const importInput = useRef<HTMLInputElement>(null);
   const tree = state.trees.find((item) => item.id === treeId) ?? state.trees[0];
@@ -408,11 +398,6 @@ export function App({
   const time = useMemo(
     () => totals(state, activeTreeId, Date.now()),
     [state, activeTreeId],
-  );
-  const historySessions = useMemo(
-    () =>
-      filterSessions(state.sessions, historyFrom, historyTo, historySubject),
-    [state.sessions, historyFrom, historyTo, historySubject],
   );
   const children = state.nodes.filter(
     (item) =>
@@ -540,23 +525,23 @@ export function App({
               </span>
               hyperforest
             </a>
-            <button
+            <div
               className="header-today"
               data-testid="today-time"
               aria-label="Today's focus"
-              title="View today's sessions"
-              onClick={() => {
-                const day = localDateTime(Date.now()).slice(0, 10);
-                setHistoryFrom(day);
-                setHistoryTo(day);
-                setHistorySubject("");
-                setDialog("history");
-              }}
             >
-              <span className="today-label">Today</span>{" "}
+              <span className="today-label">Today</span>
               <span className="today-counter">
                 <TodayCounter state={state} />
               </span>
+            </div>
+            <button
+              className="icon-button history-button"
+              aria-label="Session history"
+              title="Session history"
+              onClick={() => setDialog("history")}
+            >
+              <Icon name="history" size={22} />
             </button>
           </div>
           <div className="top-actions">
@@ -579,12 +564,6 @@ export function App({
             )}
 
             <ActionMenu label="Workspace actions">
-              <button
-                className="quiet-button"
-                onClick={() => setDialog("history")}
-              >
-                Session history
-              </button>
               {state.trees.length > 1 && (
                 <button
                   className="quiet-button"
@@ -725,44 +704,14 @@ export function App({
                   >
                     <Icon name="play" size={16} /> Focus
                   </button>
-                  <ActionMenu key={node.id} label="Goal actions">
-                    <button
-                      className="quiet-button"
-                      onClick={() => setDialog("options")}
-                    >
-                      <Icon name="settings" size={16} /> Options
-                    </button>
-                    {editing && (
-                      <>
-                        <button
-                          className="quiet-button"
-                          disabled={
-                            busy ||
-                            node.id === node.treeId ||
-                            node.finishedAt !== undefined
-                          }
-                          onClick={() => setDialog("complete")}
-                        >
-                          <Icon name="check" size={16} /> Finish goal
-                        </button>
-                        <button
-                          className="quiet-button danger"
-                          disabled={busy || node.finishedAt !== undefined}
-                          aria-label={
-                            node.id === node.treeId
-                              ? "Delete hypertree"
-                              : "Delete subtree"
-                          }
-                          onClick={() => setDialog("delete")}
-                        >
-                          <Icon name="trash" size={16} />{" "}
-                          {node.id === node.treeId
-                            ? "Delete hypertree"
-                            : "Delete subtree"}
-                        </button>
-                      </>
-                    )}
-                  </ActionMenu>
+                  <button
+                    className="icon-button"
+                    aria-label="Options"
+                    title="Options"
+                    onClick={() => setDialog("options")}
+                  >
+                    <Icon name="settings" size={18} />
+                  </button>
                 </div>
               </div>
               {editing && (
@@ -789,6 +738,27 @@ export function App({
                     }}
                   >
                     Vertex color
+                  </button>
+                  <button
+                    className="quiet-button"
+                    disabled={
+                      busy ||
+                      node.id === node.treeId ||
+                      node.finishedAt !== undefined
+                    }
+                    onClick={() => setDialog("complete")}
+                  >
+                    <Icon name="check" size={16} /> Finish goal
+                  </button>
+                  <button
+                    className="quiet-button danger"
+                    disabled={busy || node.finishedAt !== undefined}
+                    onClick={() => setDialog("delete")}
+                  >
+                    <Icon name="trash" size={16} />{" "}
+                    {node.id === node.treeId
+                      ? "Delete hypertree"
+                      : "Delete subtree"}
                   </button>
                 </div>
               )}
@@ -1406,269 +1376,17 @@ export function App({
           </Dialog>
         )}
         {dialog === "history" && (
-          <Dialog close={() => setDialog(null)} label="Session history">
-            <div className="eyebrow">TIME WELL GIVEN</div>
-            <h2>A record of showing up.</h2>
-            <div className="history-controls">
-              <button
-                className="quiet-button"
-                aria-pressed={changingHistory}
-                disabled={busy}
-                onClick={() => {
-                  setChangingHistory(!changingHistory);
-                  setAddingSession(false);
-                  setDeletingSession(null);
-                }}
-              >
-                {changingHistory ? "Done changing history" : "Change history"}
-              </button>
-              {changingHistory && (
-                <button
-                  className="quiet-button"
-                  disabled={busy || !state.nodes.length}
-                  onClick={() => {
-                    setManualNode(node?.id ?? state.nodes[0]?.id ?? "");
-                    setManualStart(localDateTime(Date.now() - 1800000));
-                    setManualHours("0");
-                    setManualMinutes("30");
-                    setManualSeconds("0");
-                    setAddingSession(true);
-                  }}
-                >
-                  Add session
-                </button>
-              )}
-            </div>
-            {changingHistory && addingSession && (
-              <form
-                className="manual-session"
-                onSubmit={(event) => {
-                  event.preventDefault();
-                  const durationMs =
-                    (Number(manualHours) * 3600 +
-                      Number(manualMinutes) * 60 +
-                      Number(manualSeconds)) *
-                    1000;
-                  void run({
-                    type: "addSession",
-                    id: crypto.randomUUID(),
-                    nodeId: manualNode,
-                    startedAt: new Date(manualStart).getTime(),
-                    durationMs,
-                  }).then((success) => {
-                    if (success) {
-                      setAddingSession(false);
-                      setHistoryFrom("");
-                      setHistoryTo("");
-                      setHistorySubject("");
-                    }
-                  });
-                }}
-              >
-                <label>
-                  Session subject
-                  <select
-                    aria-label="Session subject"
-                    value={manualNode}
-                    required
-                    disabled={busy}
-                    onChange={(event) => setManualNode(event.target.value)}
-                  >
-                    {state.trees.map((item) => (
-                      <optgroup key={item.id} label={item.title}>
-                        {state.nodes
-                          .filter((goal) => goal.treeId === item.id)
-                          .map((goal) => (
-                            <option key={goal.id} value={goal.id}>
-                              {goal.title}
-                              {goal.finishedAt !== undefined
-                                ? " (finished)"
-                                : ""}
-                            </option>
-                          ))}
-                      </optgroup>
-                    ))}
-                  </select>
-                </label>
-                <label>
-                  Started at
-                  <input
-                    type="datetime-local"
-                    required
-                    value={manualStart}
-                    disabled={busy}
-                    max={localDateTime(Date.now())}
-                    onChange={(event) => setManualStart(event.target.value)}
-                  />
-                </label>
-                <div className="session-duration">
-                  <label>
-                    Hours
-                    <input
-                      type="number"
-                      required
-                      min="0"
-                      step="1"
-                      value={manualHours}
-                      disabled={busy}
-                      onChange={(event) => setManualHours(event.target.value)}
-                    />
-                  </label>
-                  <label>
-                    Minutes
-                    <input
-                      type="number"
-                      required
-                      min="0"
-                      max="59"
-                      step="1"
-                      value={manualMinutes}
-                      disabled={busy}
-                      onChange={(event) => setManualMinutes(event.target.value)}
-                    />
-                  </label>
-                  <label>
-                    Seconds
-                    <input
-                      type="number"
-                      required
-                      min="0"
-                      max="59"
-                      step="1"
-                      value={manualSeconds}
-                      disabled={busy}
-                      onChange={(event) => setManualSeconds(event.target.value)}
-                    />
-                  </label>
-                </div>
-                <div className="history-controls">
-                  <button
-                    className="primary-button"
-                    type="submit"
-                    disabled={busy}
-                  >
-                    Save session
-                  </button>
-                  <button
-                    className="quiet-button"
-                    type="button"
-                    disabled={busy}
-                    onClick={() => setAddingSession(false)}
-                  >
-                    Cancel
-                  </button>
-                </div>
-              </form>
-            )}
-
-            <div className="history-filters">
-              <label>
-                From date
-                <input
-                  type="date"
-                  value={historyFrom}
-                  max={historyTo || undefined}
-                  onChange={(event) => setHistoryFrom(event.target.value)}
-                />
-              </label>
-              <label>
-                To date
-                <input
-                  type="date"
-                  value={historyTo}
-                  min={historyFrom || undefined}
-                  onChange={(event) => setHistoryTo(event.target.value)}
-                />
-              </label>
-              <label>
-                Subject
-                <input
-                  type="search"
-                  value={historySubject}
-                  placeholder="Any title or group"
-                  list="history-subjects"
-                  onChange={(event) => setHistorySubject(event.target.value)}
-                />
-              </label>
-              <datalist id="history-subjects">
-                {[
-                  ...new Set(state.sessions.map((session) => session.group)),
-                ].map((group) => (
-                  <option key={group} value={group} />
-                ))}
-              </datalist>
-              <button
-                className="quiet-button"
-                onClick={() => {
-                  setHistoryFrom("");
-                  setHistoryTo("");
-                  setHistorySubject("");
-                }}
-              >
-                Clear filters
-              </button>
-            </div>
-            <p role="status">
-              {historySessions.length} of {state.sessions.length} sessions
-            </p>
-            <div className="history-list">
-              {historySessions.length ? (
-                [...historySessions].reverse().map((session) => (
-                  <article key={session.id}>
-                    <div>
-                      <strong>{session.title}</strong>
-                      <small>
-                        {session.group}
-                        <br />
-                        {new Date(session.startedAt).toLocaleString()}
-                      </small>
-                    </div>
-                    <span>{shortTime(session.durationMs)}</span>
-                    {changingHistory &&
-                      (deletingSession === session.id ? (
-                        <div className="history-controls">
-                          <button
-                            className="quiet-button danger"
-                            disabled={busy}
-                            onClick={() => {
-                              void run({
-                                type: "deleteSession",
-                                id: session.id,
-                              }).then((success) => {
-                                if (success) setDeletingSession(null);
-                              });
-                            }}
-                          >
-                            Confirm delete
-                          </button>
-                          <button
-                            className="quiet-button"
-                            disabled={busy}
-                            onClick={() => setDeletingSession(null)}
-                          >
-                            Cancel
-                          </button>
-                        </div>
-                      ) : (
-                        <button
-                          className="icon-button danger"
-                          aria-label={`Delete session ${session.title}`}
-                          disabled={busy}
-                          onClick={() => setDeletingSession(session.id)}
-                        >
-                          <Icon name="trash" />
-                        </button>
-                      ))}
-                  </article>
-                ))
-              ) : (
-                <p>
-                  {state.sessions.length
-                    ? "No sessions match these filters."
-                    : "Your saved sessions will appear here. Start small."}
-                </p>
-              )}
-            </div>
+          <Dialog
+            close={() => setDialog(null)}
+            label="Session history"
+            className="history-dialog"
+          >
+            <SessionHistory
+              state={state}
+              busy={busy}
+              selectedNodeId={node?.id}
+              run={run}
+            />
           </Dialog>
         )}
         {error && !dialog && !running && (

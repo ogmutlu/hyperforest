@@ -111,6 +111,42 @@ impl Domain {
         .and_then(|value| document::safe_number(value).map_err(js))
     }
 
+    /// Calendar conversion and subject matching are caller concerns. All
+    /// interval attribution, sums, and averages are computed by the pure domain.
+    pub fn history(&self, selected: &str, boundaries: &str) -> Result<String, JsError> {
+        let selected: Vec<usize> =
+            serde_json::from_str(selected).map_err(|error| js(error.to_string()))?;
+        let boundaries: Vec<f64> =
+            serde_json::from_str(boundaries).map_err(|error| js(error.to_string()))?;
+        let boundaries = boundaries
+            .into_iter()
+            .map(millis)
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(js)?;
+        let value = d::history::statistics(self.state.snapshot(), &selected, &boundaries)
+            .map_err(|error| js(message(error)))?;
+        let number = |value| document::safe_number(value).map_err(js);
+        let daily = value
+            .daily_ms
+            .iter()
+            .map(|value| number(*value))
+            .collect::<Result<Vec<_>, _>>()?;
+        let sessions = value.sessions.iter().map(|session| {
+            Ok(serde_json::json!({ "index": session.session_index, "durationMs": number(session.duration_ms)? }))
+        }).collect::<Result<Vec<_>, JsError>>()?;
+        json(&serde_json::json!({
+            "totalMs": number(value.total_ms)?,
+            "averageDayMs": number(value.average_day_ms)?,
+            "averageActiveDayMs": number(value.average_active_day_ms)?,
+            "averageSessionMs": number(value.average_session_ms)?,
+            "longestSessionMs": number(value.longest_session_ms)?,
+            "activeDays": value.active_days,
+            "dailyMs": daily,
+            "sessions": sessions,
+        }))
+        .map_err(js)
+    }
+
     pub fn path(&self, id: &str) -> Result<String, JsError> {
         let value = d::graph::node_path(self.state.snapshot(), &id.as_bytes().to_vec())
             .map_err(|e| js(message(e)))?;

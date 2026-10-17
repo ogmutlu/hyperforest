@@ -51,6 +51,16 @@ native IPC, YAML/Markdown persistence, report generation, backups, and React.
 Results and the complete test workspace remain in a printed directory under
 `/tmp/hyperforest-desktop-perf.*` for inspection.
 
+After the measured intervals, the harness also checks the real history table and
+statistics, modal scroll isolation, and interface zoom persistence through a
+WebView reload. It also checks repeated calendar opening/dismissal, field
+switching, manual-session date selection, and restoring the selected interval.
+These checks do not enter the frame or edit/save measurements.
+The browser regression suite separately exercises 1,205 saved sessions, bounded
+100-row pages, filtering/statistics, background scroll isolation, and narrower
+history windows. The Rust history query visits only calendar days touched by
+each focus period, rather than every session/day pair.
+
 The harness refuses an existing workspace and requires its config directory to
 be inside that temporary directory. It skips backup-timer registration, so it does
 not change user services. Normal builds do not compile the harness or expose its

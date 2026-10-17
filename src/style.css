@@ -412,29 +412,6 @@ form > .primary-button {
   background: #75433d;
   border: 1px solid #976058;
 }
-.history-list {
-  max-height: 55vh;
-  overflow: auto;
-}
-.history-list article {
-  display: flex;
-  gap: 12px;
-  justify-content: space-between;
-  padding: 17px 0;
-  border-bottom: 1px solid var(--line);
-  font-size: 12px;
-}
-.history-list small {
-  display: block;
-  color: #718b9d;
-  font-size: 10px;
-  line-height: 1.7;
-  margin-top: 7px;
-}
-.history-list article > span {
-  color: var(--gold);
-  white-space: nowrap;
-}
 .empty-workspace {
   text-align: center;
   padding: 100px 20px;
@@ -786,42 +763,6 @@ button:disabled {
 .pedantic-tooltip {
   pointer-events: none;
 }
-.history-filters {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 12px;
-  margin: 16px 0;
-}
-.history-filters > label:nth-child(3) {
-  grid-column: 1 / -1;
-}
-@media (max-width: 500px) {
-  .history-filters {
-    grid-template-columns: 1fr;
-  }
-}
-
-.history-controls {
-  display: flex;
-  gap: 10px;
-  align-items: center;
-  flex-wrap: wrap;
-}
-.manual-session {
-  padding: 16px;
-  border: 1px solid var(--line);
-  border-radius: 6px;
-  margin-top: 12px;
-}
-.session-duration {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 10px;
-}
-.history-list article > div:first-child {
-  flex: 1;
-  min-width: 0;
-}
 .graph-options-controls {
   display: flex;
   flex-direction: column;
@@ -961,9 +902,6 @@ button:disabled {
   line-height: 1.1;
   color: var(--gold);
   font-variant-numeric: tabular-nums;
-}
-.header-today:hover .today-counter {
-  color: #ffe0a0;
 }
 .desktop-save-status {
   position: relative;
@@ -1394,4 +1332,324 @@ button:disabled {
   .focus-content {
     gap: 14px;
   }
+}
+
+/* The history is a desktop ledger: one bounded scroll area, compact rows. */
+.history-button {
+  padding: 8px;
+  color: var(--gold);
+}
+.history-dialog {
+  width: min(1200px, calc(100vw - 32px));
+  height: min(880px, calc(100dvh - 32px));
+  max-height: calc(100dvh - 32px);
+  padding: 24px;
+  overflow: hidden;
+  overscroll-behavior: contain;
+}
+.history-content {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.history-dialog[open] {
+  display: flex;
+  flex-direction: column;
+}
+.history-dialog > .inline-error {
+  flex-shrink: 0;
+}
+.history-heading {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  padding-right: 32px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--line);
+}
+.history-dialog h2 {
+  margin: 0 0 4px;
+  font:
+    500 23px Inter,
+    "Segoe UI",
+    Arial,
+    sans-serif;
+  letter-spacing: -0.4px;
+}
+.history-controls {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.history-scroll {
+  min-height: 0;
+  flex: 1;
+  overflow: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+}
+.history-filters {
+  display: grid;
+  grid-template-columns: 170px 170px minmax(160px, 1fr) auto;
+  align-items: end;
+  gap: 12px;
+  margin: 16px 0;
+}
+.history-filters input,
+.manual-session input,
+.manual-session select {
+  padding: 8px 10px;
+}
+.history-statistics {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  margin: 0;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  overflow: hidden;
+}
+.history-statistics > div {
+  padding: 12px 16px;
+  background: #101922;
+}
+.history-statistics dt {
+  font-size: 11px;
+  color: #9aabb6;
+}
+.history-statistics dd {
+  margin: 6px 0 0;
+  font-size: 21px;
+  font-variant-numeric: tabular-nums;
+  color: var(--gold);
+}
+.history-dialog .history-explanation {
+  margin: 10px 0;
+  font-size: 11px;
+}
+.history-count {
+  margin: 12px 0 6px;
+}
+.history-list table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  font-size: 12px;
+  text-align: left;
+}
+.history-list th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: #1b2834;
+  color: #aebcc5;
+  font-size: 11px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+.history-list th,
+.history-list td {
+  padding: 9px 12px;
+  border-bottom: 1px solid var(--line);
+}
+.history-list td {
+  max-width: 240px;
+  overflow-wrap: anywhere;
+}
+.history-list tbody tr:hover {
+  background: #17232e;
+}
+.history-list td:first-child,
+.history-list td:nth-child(2),
+.history-duration {
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.history-list .history-duration {
+  text-align: right;
+}
+.history-list td.history-duration {
+  color: var(--gold);
+}
+.history-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+  font-size: 12px;
+  color: #9aabb6;
+}
+.history-dialog .manual-session {
+  display: grid;
+  grid-template-columns: minmax(140px, 1fr) minmax(240px, 1fr) minmax(
+      180px,
+      1fr
+    );
+  gap: 12px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  margin: 12px 0;
+}
+.session-duration {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+.manual-session > .history-controls {
+  grid-column: 1 / -1;
+  justify-content: flex-end;
+}
+@media (max-width: 760px) {
+  .history-dialog {
+    padding: 16px;
+  }
+  .history-heading {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .history-filters {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .history-statistics {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .history-statistics > div {
+    padding: 10px;
+  }
+  .history-list {
+    overflow-x: auto;
+  }
+  .history-list table {
+    min-width: 640px;
+  }
+  .history-pagination {
+    flex-wrap: wrap;
+  }
+  .history-dialog .manual-session {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* One calendar implementation for Chromium and desktop WebKit. */
+.date-field {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+.date-field-entry {
+  display: flex;
+  border: 1px solid #344451;
+  background: #0c141c;
+  border-radius: 5px;
+}
+.date-field-entry:focus-within {
+  border-color: #a79167;
+}
+.date-field-entry input {
+  min-width: 0;
+  border: 0;
+  background: none;
+  font-variant-numeric: tabular-nums;
+}
+.date-field-entry input:focus {
+  box-shadow: none;
+}
+.date-field-entry > button {
+  flex-shrink: 0;
+  padding: 8px;
+}
+.date-calendar {
+  z-index: 100;
+  width: 290px;
+  max-width: calc(100vw - 16px);
+  padding: 12px;
+  border: 1px solid #596a79;
+  border-radius: 8px;
+  background: #14212d;
+  box-shadow: 0 12px 32px #0008;
+  color: #d6e1e5;
+  font-size: 12px;
+}
+.date-calendar-heading,
+.date-calendar-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+}
+.date-calendar-heading > span {
+  font-size: 13px;
+  font-weight: 600;
+}
+.date-calendar-heading button {
+  min-width: 28px;
+  font-size: 20px;
+}
+.date-calendar-month {
+  display: grid;
+  grid-template-columns: 1fr 85px;
+  gap: 8px;
+  margin: 4px 0 10px;
+}
+.date-calendar-month label {
+  gap: 4px;
+}
+.date-calendar-month select {
+  padding: 5px 6px;
+  font-size: 12px;
+}
+.date-calendar-grid [role="row"] {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 2px;
+}
+.date-calendar-week {
+  color: #9aabb6;
+  text-align: center;
+  font-size: 11px;
+  padding-bottom: 6px;
+}
+.date-calendar-grid button {
+  border: 1px solid transparent;
+  border-radius: 4px;
+  background: none;
+  color: inherit;
+  min-height: 30px;
+  padding: 4px;
+  font-size: 12px;
+}
+.date-calendar-grid button:hover:not(:disabled),
+.date-calendar-grid button:focus-visible {
+  background: #293e50;
+}
+.date-calendar-grid button[aria-current="date"] {
+  border-color: #788b9b;
+}
+.date-calendar-grid button[aria-selected="true"] {
+  background: var(--gold);
+  color: #14212d;
+}
+.date-calendar-grid button:disabled {
+  opacity: 0.3;
+  cursor: default;
+}
+.date-calendar-footer {
+  margin-top: 8px;
+  border-top: 1px solid var(--line);
+}
+.date-calendar-footer button {
+  font-size: 11px;
+  padding: 8px 4px 0;
+}
+.manual-start {
+  display: grid;
+  grid-template-columns: minmax(125px, 1fr) minmax(90px, 1fr);
+  gap: 8px;
 }

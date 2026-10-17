@@ -33,7 +33,7 @@ then run `npm run desktop:dev`.
 ## Use
 
 Create a hypertree, enable **Edit graph**, and add goals. Drag vertices to place
-them and drag edge handles to reconnect them. **Goal actions (⋯) → Options → pedantic** requires
+them and drag edge handles to reconnect them. **Options (gear) → pedantic** requires
 connected graphs and connected color classes. It is off by default.
 
 Double-click a goal or select **Focus** to start its timer. **Pause** freezes the
@@ -47,14 +47,24 @@ preserves its subtree, notes, and history. Deletion removes vertices but retains
 session history.
 
 **Today**, beside the Hyperforest name, shows focus across the whole workspace
-in hours and minutes and opens history filtered to today. The selected goal's
+in hours and minutes. The history icon to its right opens session history. The selected goal's
 total appears beneath its name. On desktop, a narrow status bar holds
 **Autosaved** and interface zoom. Hover or focus **Autosaved** for the directory
 and last save time; click for storage controls. Editing
-controls appear only in **Edit graph** mode; finishing and deletion live in
-**Goal actions (⋯)**. **Workspace actions (⋯)** contains session history, export, import, tab
+controls appear only in **Edit graph** mode; **Finish goal** and **Delete hypertree/subtree**
+follow **Vertex color**. The gear beside Focus opens **Options** directly.
+**Workspace actions (⋯)** contains export, import, tab
 ordering, and clear-data controls. The same controls serve web and desktop, with
 rows wrapping at narrower widths.
+
+Session history uses a wide, compact table with 100 sessions per page and its own
+scroll area. Date and subject filters update totals, daily and session averages,
+longest session, and active-day counts. Rust clips recorded focus periods to the
+selected local dates, excluding pauses and unsaved focus. Daily averages include
+zero-focus days. Blank dates mean the first saved session through today.
+The calendar buttons open a shared picker, and history remembers its last valid
+date range across reopening and app restarts.
+Desktop interface zoom is remembered across restarts.
 
 The desktop app saves the current YAML workspace and real Markdown files in a
 directory you choose. **Export** creates a ZIP using the same format:

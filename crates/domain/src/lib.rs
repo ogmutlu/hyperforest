@@ -8,6 +8,7 @@
 extern crate alloc;
 
 pub mod graph;
+pub mod history;
 pub mod model;
 pub mod time;
 mod transition;

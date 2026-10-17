@@ -1,3 +1,4 @@
+import { historyDays, matchingSessionIndices } from "../src/calendar";
 import { sampleWorkspace } from "./sampleWorkspace";
 import { describe, expect, it } from "vitest";
 import {
@@ -7,12 +8,12 @@ import {
   totals,
   todayTotals,
   todayTime,
+  historyStatistics,
 } from "../src/domainClient";
 import {
   formatHms,
   DEFAULT_COLORS,
   assignedNodeColors,
-  filterSessions,
 } from "../src/presentation";
 import type { State } from "../src/model";
 import { STORAGE_KEY, Workspace } from "../src/storage";
@@ -1042,14 +1043,16 @@ it("history date and subject filters combine with inclusive local-day boundaries
     state = apply(state, { type: "start", id: "a" }, start);
     state = apply(state, { type: "finish", id: `saved-${index}` }, start + 500);
   }
-  expect(
-    filterSessions(state.sessions, "2026-10-07", "2026-10-07", "research"),
-  ).toHaveLength(2);
-  expect(
-    filterSessions(state.sessions, "", "2026-10-06", "General"),
-  ).toHaveLength(1);
-  expect(filterSessions(state.sessions, "", "", "unknown")).toHaveLength(0);
-  expect(filterSessions(state.sessions, "", "", "")).toHaveLength(3);
+  const query = (from: string, to: string, subject: string) =>
+    historyStatistics(
+      state,
+      matchingSessionIndices(state.sessions, subject),
+      historyDays(state.sessions, from, to, day + 86400000),
+    ).sessions;
+  expect(query("2026-10-07", "2026-10-07", "research")).toHaveLength(2);
+  expect(query("", "2026-10-06", "General")).toHaveLength(1);
+  expect(query("", "", "unknown")).toHaveLength(0);
+  expect(query("", "", "")).toHaveLength(3);
 });
 
 it("formats Today in h m s and edits history without disturbing focus", () => {

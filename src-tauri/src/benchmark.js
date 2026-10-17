@@ -21,7 +21,28 @@
     button.click();
   };
   try {
+    const previousReport = sessionStorage.getItem("hyperforest-benchmark-before-reload");
+    if (previousReport) {
+      await wait(() => document.querySelector('[aria-label="Reset interface zoom"]')?.textContent.trim() === "110%" && document.querySelector('.desktop-save-status summary[aria-label="Autosaved"]'));
+      if (document.querySelector(".desktop-error")) throw new Error(document.querySelector(".desktop-error").textContent);
+      document.querySelector('[aria-label="Session history"]').click();
+      await wait(() => document.querySelector('.history-dialog[open]'));
+      const savedRange = JSON.parse(localStorage.getItem("hyperforest.history-range"));
+      const toInput = [...document.querySelectorAll('.date-field')].find((field) => field.querySelector("label")?.textContent === "To date").querySelector("input");
+      if (toInput.value !== savedRange.to || !toInput.value) throw new Error("History interval was not restored after reload");
+      document.querySelector('[aria-label="Choose to date"]').click();
+      await wait(() => document.querySelector('[aria-label="To date calendar"]'));
+      const popup = document.querySelector('.date-calendar').getBoundingClientRect();
+      if (popup.left < 0 || popup.right > innerWidth || popup.top < 0 || popup.bottom > innerHeight) throw new Error("Calendar is clipped at restored zoom");
+      [...document.querySelectorAll('.date-calendar button')].find((button) => button.textContent.trim() === "Close calendar").click();
+      document.querySelector('[aria-label="Close dialog"]').click();
+      const report = JSON.parse(previousReport);
+      sessionStorage.removeItem("hyperforest-benchmark-before-reload");
+      await send({ ...report, historyAndZoomChecks: "passed: native history table and statistics, independent scroll area, interface zoom and selected interval restored after reload; calendar positioned at restored zoom" });
+      return;
+    }
     await wait(() => document.querySelector('[data-testid="node-root"]') && document.querySelector('.desktop-save-status summary[aria-label="Autosaved"]'));
+    const initialDevicePixelRatio = devicePixelRatio;
     const startupToSavedGraphMs = performance.now();
     const svg = document.querySelector(".graph-svg");
     const samples = async (count, zoom) => {
@@ -76,9 +97,46 @@
     await wait(() => !document.querySelector(".focus-screen"));
     await trayState(false, false);
     if (document.querySelector(".desktop-error")) throw new Error(document.querySelector(".desktop-error").textContent);
-    await send({ engine: navigator.userAgent, vertices: 500, devicePixelRatio,
+    document.querySelector('[aria-label="Session history"]').click();
+    await wait(() => document.querySelector('.history-list tbody tr') && document.querySelector('.history-statistics dd'));
+    const scroll = document.querySelector(".history-scroll");
+    if (getComputedStyle(scroll).overflowY !== "auto" || document.body.style.overflow !== "hidden") throw new Error("History does not isolate scrolling");
+    const fromCalendar = document.querySelector('[aria-label="Choose from date"]');
+    const toCalendar = document.querySelector('[aria-label="Choose to date"]');
+    for (let i = 0; i < 4; i++) {
+      fromCalendar.click();
+      await wait(() => document.querySelector('[aria-label="From date calendar"]'));
+      document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }));
+      await wait(() => !document.querySelector(".date-calendar"));
+      if (!document.querySelector('.history-dialog[open]')) throw new Error("Calendar Escape closed history");
+    }
+    fromCalendar.click();
+    await wait(() => document.querySelector('[aria-label="From date calendar"]'));
+    toCalendar.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true }));
+    toCalendar.click();
+    await wait(() => document.querySelector('[aria-label="To date calendar"]') && document.querySelectorAll(".date-calendar").length === 1);
+    const calendarBox = document.querySelector(".date-calendar").getBoundingClientRect();
+    if (calendarBox.left < 0 || calendarBox.right > innerWidth || calendarBox.top < 0 || calendarBox.bottom > innerHeight) throw new Error("Calendar is outside the viewport");
+    document.querySelector('.date-calendar button[aria-current="date"]').click();
+    await wait(() => !document.querySelector(".date-calendar"));
+    click("Change history");
+    await wait(() => [...document.querySelectorAll("button")].some((button) => button.textContent.trim() === "Add session"));
+    click("Add session");
+    await wait(() => document.querySelector('[aria-label="Choose session start date"]'));
+    document.querySelector('[aria-label="Choose session start date"]').click();
+    await wait(() => document.querySelector('[aria-label="Session start date calendar"]'));
+    document.querySelector('.date-calendar button[data-day][tabindex="0"]').click();
+    await wait(() => !document.querySelector(".date-calendar"));
+    if (!document.querySelector(".manual-session")) throw new Error("Calendar accidentally submitted the session form");
+    document.querySelector('[aria-label="Close dialog"]').click();
+    document.querySelector('[aria-label="Zoom interface in"]').click();
+    await wait(() => localStorage.getItem("hyperforest.interface-zoom") === "1.1");
+    const report = { engine: navigator.userAgent, vertices: 500, devicePixelRatio: initialDevicePixelRatio,
       startupToSavedGraphMs, idleFrames, zoomFrames, editAndSaveMs: editsMs,
       focusKeyboardAndTrayChecks: "passed: running, paused, resumed, saved; native tray updates succeeded",
-      note: "Visible production Tauri/WebKit window. Includes real Rust WASM, IPC, reports, disk writes, and daily backup updates. Frame intervals include display pacing." });
+      calendarChecks: "passed: repeated open/close, Escape isolation, switching fields, selection, viewport bounds, manual-session date selection",
+      note: "Visible production Tauri/WebKit window. Includes real Rust WASM, IPC, reports, disk writes, and daily backup updates. Frame intervals include display pacing." };
+    sessionStorage.setItem("hyperforest-benchmark-before-reload", JSON.stringify(report));
+    location.reload();
   } catch (error) { await send({ error: String(error) }); }
 })();

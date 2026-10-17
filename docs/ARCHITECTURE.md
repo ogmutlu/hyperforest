@@ -84,6 +84,26 @@ snapshot is published. Conflicts and disk failures are surfaced to the interface
 ## Rendering
 
 - `App.tsx` coordinates selection, dialogs, and commands.
+- `SessionHistory.tsx` owns the history filters, manual-edit forms, and a compact
+  table paginated at 100 rows. The modal locks background scrolling and bounds
+  its own scroll area. Statistics are queried only while history is open.
+  `calendar.ts` converts inclusive local date filters to successive midnight
+  boundaries (including 23/25-hour DST days) and matches subject text. It performs
+  no duration accounting. `crates/domain/src/history.rs` clips periods, counts
+  sessions and active days, and computes checked integer totals and averages.
+  The bridge only serializes the results; `domainClient.ts` exposes their types.
+- `DateField.tsx` is the shared calendar for filters and manual sessions. It has
+  an explicit toggle, strict ISO date entry, date limits, and keyboard navigation.
+  Its popup remains inside the modal's DOM, positioned against the viewport to
+  avoid clipping by the history scroll area. Escape dismisses only the calendar;
+  outside clicks, scrolling, and resizing dismiss it without moving focus back.
+  It owns no accounting rules and adds no UI dependency.
+- `historyRange.ts` persists only the last valid date-filter endpoints in local
+  interface storage. Partial/invalid entry does not replace the saved interval;
+  malformed preferences fall back to the all-time range. No accounting result,
+  session data, or domain state is stored in this preference.
+- `DesktopApp.tsx` applies and remembers interface zoom in WebView local storage.
+  Zoom is a local presentation preference, not workspace or domain state.
 - `DesktopSaveStatus.tsx` supplies Autosaved in the narrow desktop status bar.
   Its tooltip exposes the native directory only on hover/focus; its disclosure
   holds storage controls. Interface zoom stays beside Autosaved in the bar.
@@ -105,7 +125,7 @@ snapshot is published. Conflicts and disk failures are surfaced to the interface
   accounting rules. Pause, resume, and save still use the same domain commands.
   Space in `FocusSession.tsx` invokes pause/resume only for a noninteractive focus
   surface, ignoring repeats, modifiers, and text entry.
-- `presentation.ts` formats durations and filters the history by local dates/text.
+- `presentation.ts` formats durations and reads normalized colors.
 
 The graph does not rerender on a global 250-ms timer. Parent lookups use an indexed
 map. Panning changes the SVG group transform while memoized vertices/edges keep

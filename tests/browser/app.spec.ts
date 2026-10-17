@@ -6,7 +6,6 @@ import { DEFAULT_COLORS } from "../../src/presentation";
 import { apply } from "../../src/domainClient";
 
 async function goalAction(page: Page, name: string): Promise<void> {
-  await page.getByLabel("Goal actions", { exact: true }).click();
   await page.getByRole("button", { name, exact: true }).click();
 }
 async function workspaceAction(page: Page, name: string): Promise<void> {
@@ -602,7 +601,9 @@ test("finishing preserves a child as a ghost, frees its name, and retains parent
   await expect(page.locator(".time-stat > :first-child")).toHaveText(
     parentTime,
   );
-  await workspaceAction(page, "Session history");
+  await page
+    .getByRole("button", { name: "Session history", exact: true })
+    .click();
   await expect(page.locator(".history-list")).toContainText("Read & wonder");
   await page.getByRole("button", { name: "Close dialog", exact: true }).click();
   await graphOption(page, "finished");
@@ -719,7 +720,9 @@ test("drags persist and paused focus survives minimizing and reloading", async (
     .getByRole("button", { name: "Save & finish", exact: true })
     .click();
   await expect(page.locator(".focus-dock")).toHaveCount(0);
-  await workspaceAction(page, "Session history");
+  await page
+    .getByRole("button", { name: "Session history", exact: true })
+    .click();
   await expect(page.locator(".history-list")).toContainText("Read & wonder");
   expect(errors).toEqual([]);
 });
@@ -1120,8 +1123,10 @@ test("session history combines date and subject filters and can clear them", asy
     localStorage.setItem("hyperforest.workspace.v1", JSON.stringify(state));
   });
   await page.goto("./");
-  await workspaceAction(page, "Session history");
-  const history = page.locator(".history-list article");
+  await page
+    .getByRole("button", { name: "Session history", exact: true })
+    .click();
+  const history = page.locator(".history-list tbody tr");
   await expect(history).toHaveCount(3);
   await page.getByLabel("From date", { exact: true }).fill("2026-10-07");
   await page.getByLabel("To date", { exact: true }).fill("2026-10-07");
@@ -1139,7 +1144,7 @@ test("session history combines date and subject filters and can clear them", asy
   await expect(history).toHaveCount(3);
 });
 
-test("Today is global in the header and opens today's history", async ({
+test("Today is a global counter and the history icon to its right opens history", async ({
   page,
 }) => {
   await page.goto("./");
@@ -1159,19 +1164,29 @@ test("Today is global in the header and opens today's history", async ({
   await expect(today.locator(".today-counter")).toHaveText(pausedToday);
   await expect(page.locator("header").getByTestId("today-time")).toBeVisible();
   await today.click();
-  const day = await page.evaluate(() => {
-    const date = new Date();
-    return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+  const historyButton = page.getByRole("button", {
+    name: "Session history",
+    exact: true,
   });
-  await expect(page.getByLabel("From date", { exact: true })).toHaveValue(day);
-  await expect(page.getByLabel("To date", { exact: true })).toHaveValue(day);
+  const todayBox = await today.boundingBox();
+  const historyBox = await historyButton.boundingBox();
+  expect(historyBox!.x).toBeGreaterThan(todayBox!.x + todayBox!.width);
+  await historyButton.click();
+  await expect(
+    page.getByRole("dialog", { name: "Session history" }),
+  ).toBeVisible();
+  await expect(page.getByLabel("From date", { exact: true })).toHaveValue("");
+  await expect(page.getByLabel("To date", { exact: true })).toHaveValue("");
 });
 
 test("change history adds a persistent session and confirms deletion", async ({
   page,
 }) => {
   await page.goto("./");
-  await workspaceAction(page, "Session history");
+  await page
+    .getByRole("button", { name: "Session history", exact: true })
+    .click();
   await page
     .getByRole("button", { name: "Change history", exact: true })
     .click();
@@ -1183,12 +1198,14 @@ test("change history adds a persistent session and confirms deletion", async ({
   await page.getByLabel("Seconds", { exact: true }).fill("5");
   await page.getByRole("button", { name: "Save session", exact: true }).click();
   await expect(page.locator(".manual-session")).toHaveCount(0);
-  await expect(page.locator(".history-list article")).toHaveCount(1);
+  await expect(page.locator(".history-list tbody tr")).toHaveCount(1);
   await expect(page.locator(".history-list")).toContainText("Read & wonder");
   await page.reload();
   await expect(page.locator(".today-counter")).toHaveText("0h 1m");
-  await workspaceAction(page, "Session history");
-  await expect(page.locator(".history-list article")).toHaveCount(1);
+  await page
+    .getByRole("button", { name: "Session history", exact: true })
+    .click();
+  await expect(page.locator(".history-list tbody tr")).toHaveCount(1);
   await page
     .getByRole("button", { name: "Change history", exact: true })
     .click();
@@ -1196,14 +1213,14 @@ test("change history adds a persistent session and confirms deletion", async ({
     .getByRole("button", { name: "Delete session Read & wonder", exact: true })
     .click();
   await page.getByRole("button", { name: "Cancel", exact: true }).click();
-  await expect(page.locator(".history-list article")).toHaveCount(1);
+  await expect(page.locator(".history-list tbody tr")).toHaveCount(1);
   await page
     .getByRole("button", { name: "Delete session Read & wonder", exact: true })
     .click();
   await page
     .getByRole("button", { name: "Confirm delete", exact: true })
     .click();
-  await expect(page.locator(".history-list article")).toHaveCount(0);
+  await expect(page.locator(".history-list tbody tr")).toHaveCount(0);
   await page.reload();
   await expect(page.locator(".today-counter")).toHaveText("0h 0m");
 });
@@ -1240,7 +1257,7 @@ test("new vertex chooses a parent in its dialog and submits with Add vertex", as
   );
 });
 
-test("secondary actions use a dismissible disclosure and editing controls appear only while editing", async ({
+test("options open directly and finish/delete follow vertex color only in edit mode", async ({
   page,
 }) => {
   await page.goto("./");
@@ -1248,39 +1265,44 @@ test("secondary actions use a dismissible disclosure and editing controls appear
     page.getByRole("button", { name: "Vertex color", exact: true }),
   ).toHaveCount(0);
   await expect(
-    page.getByRole("button", { name: "New vertex", exact: true }),
+    page.getByRole("button", { name: "Finish goal", exact: true }),
   ).toHaveCount(0);
-  const menu = page.getByLabel("Goal actions", { exact: true });
-  await menu.focus();
-  await page.keyboard.press("Enter");
-  await expect(
-    page.getByRole("button", { name: "Options", exact: true }),
-  ).toBeVisible();
-  await page.keyboard.press("Escape");
-  await expect(
-    page.getByRole("button", { name: "Options", exact: true }),
-  ).toBeHidden();
-  await expect(menu).toBeFocused();
-  await menu.click();
-  await page.locator(".node-heading").click();
-  await expect(
-    page.getByRole("button", { name: "Options", exact: true }),
-  ).toBeHidden();
-  await page.getByRole("button", { name: "Edit graph", exact: true }).click();
-  await expect(
-    page.getByRole("button", { name: "New vertex", exact: true }),
-  ).toBeVisible();
-  await expect(
-    page.getByRole("button", { name: "Vertex color", exact: true }),
-  ).toBeVisible();
-  await menu.click();
   await expect(
     page.getByRole("button", { name: "Delete hypertree", exact: true }),
-  ).toBeVisible();
+  ).toHaveCount(0);
+  await expect(page.getByLabel("Goal actions", { exact: true })).toHaveCount(0);
   await page.getByRole("button", { name: "Options", exact: true }).click();
+  await expect(
+    page.getByRole("dialog", { name: "Graph options" }),
+  ).toBeVisible();
   await expect(
     page.getByRole("switch", { name: "finished", exact: true }),
   ).toHaveAccessibleDescription(/notes and focus time/);
+  await page.keyboard.press("Escape");
+  await page.getByRole("button", { name: "Edit graph", exact: true }).click();
+  expect(
+    (await page.locator(".edit-toolbar button").allTextContents()).map((text) =>
+      text.trim(),
+    ),
+  ).toEqual(["New vertex", "Vertex color", "Finish goal", "Delete hypertree"]);
+  await expect(
+    page.getByRole("button", { name: "Finish goal", exact: true }),
+  ).toBeDisabled();
+  await page
+    .getByRole("button", { name: "Select Read & wonder", exact: true })
+    .click();
+  await expect(
+    page.getByRole("button", { name: "Finish goal", exact: true }),
+  ).toBeEnabled();
+  await expect(
+    page.getByRole("button", { name: "Delete subtree", exact: true }),
+  ).toBeVisible();
+  await page.getByLabel("Workspace actions", { exact: true }).click();
+  await expect(
+    page
+      .locator(".action-menu-items")
+      .getByRole("button", { name: "Session history", exact: true }),
+  ).toHaveCount(0);
 });
 
 test("pedantic and finished show separate explanations only on hover or keyboard focus", async ({
@@ -1408,6 +1430,14 @@ test("desktop uses selected YAML and Markdown storage rather than browser worksp
     .poll(() => page.evaluate(() => localStorage.getItem("test.zoom")))
     .toBe("1");
   await page.keyboard.press("Control+=");
+  await expect
+    .poll(() => page.evaluate(() => localStorage.getItem("test.zoom")))
+    .toBe("1.1");
+  await page.evaluate(() => localStorage.removeItem("test.zoom"));
+  await page.reload();
+  await expect(
+    page.getByRole("button", { name: "Reset interface zoom", exact: true }),
+  ).toHaveText("110%");
   await expect
     .poll(() => page.evaluate(() => localStorage.getItem("test.zoom")))
     .toBe("1.1");
@@ -1756,4 +1786,320 @@ test("dense graph navigation restores labels and connections after the gesture",
   await expect(label).toBeHidden();
   await expect(edge).toBeVisible();
   await expect(label).toBeVisible();
+});
+
+test("history handles a large ledger with Rust statistics, pagination, and isolated scrolling", async ({
+  page,
+}) => {
+  await page.addInitScript(() => {
+    const state = JSON.parse(localStorage.getItem("hyperforest.workspace.v1")!);
+    state.sessions = Array.from({ length: 1205 }, (_, index) => {
+      const start = new Date(2026, 9, 1, 0, index).getTime();
+      return {
+        id: `ledger-${index}`,
+        treeId: "project",
+        nodeId: "read",
+        title: `Reading ${index}`,
+        group: "Research",
+        startedAt: start,
+        endedAt: start + 60000,
+        durationMs: 60000,
+        periods: [{ start, end: start + 60000 }],
+      };
+    });
+    localStorage.setItem("hyperforest.workspace.v1", JSON.stringify(state));
+  });
+  await page.goto("./");
+  await page.addStyleTag({ content: "body { min-height: 2000px; }" });
+  await page
+    .getByRole("button", { name: "Session history", exact: true })
+    .click();
+  const dialog = page.getByRole("dialog", {
+    name: "Session history",
+    exact: true,
+  });
+  expect((await dialog.boundingBox())!.width).toBeGreaterThan(1000);
+  const history = dialog.locator(".history-list tbody tr");
+  await expect(history).toHaveCount(100);
+  await expect(history.first()).toContainText("Reading 1204");
+  await dialog.getByLabel("From date", { exact: true }).fill("2026-10-01");
+  await dialog.getByLabel("To date", { exact: true }).fill("2026-10-03");
+  const metric = (name: string) =>
+    dialog
+      .locator(".history-statistics > div")
+      .filter({ has: page.getByText(name, { exact: true }) })
+      .locator("dd");
+  await expect(metric("Total focus")).toHaveText("20h 5m");
+  await expect(metric("Average per day")).toHaveText("6h 41m");
+  await expect(metric("Active days")).toHaveText("1");
+  await expect(metric("Calendar days")).toHaveText("3");
+  await expect(metric("Sessions")).toHaveText("1205");
+  await expect(metric("Average session")).toHaveText("1m");
+  await expect(metric("Longest session")).toHaveText("1m");
+  const previousY = await page.evaluate(() => window.scrollY);
+  const scroll = dialog.locator(".history-scroll");
+  await scroll.hover();
+  await page.mouse.wheel(0, 50000);
+  await expect
+    .poll(() => scroll.evaluate((element) => element.scrollTop))
+    .toBeGreaterThan(0);
+  await page.mouse.wheel(0, 50000);
+  await expect.poll(() => page.evaluate(() => window.scrollY)).toBe(previousY);
+  await dialog.getByRole("button", { name: "Next page", exact: true }).click();
+  await expect(history.first()).toContainText("Reading 1104");
+  await dialog.getByLabel("Subject", { exact: true }).fill("Reading 1204");
+  await expect(history).toHaveCount(1);
+  await expect(metric("Sessions")).toHaveText("1");
+  await expect(
+    dialog.getByRole("button", { name: "Next page", exact: true }),
+  ).toBeDisabled();
+  await dialog
+    .getByRole("button", { name: "Close dialog", exact: true })
+    .focus();
+  await page.keyboard.press("Escape");
+  await expect(dialog).toHaveCount(0);
+  expect(await page.evaluate(() => document.body.style.overflow)).toBe("");
+});
+
+for (const width of [800, 390]) {
+  test(`history fits independently at ${width}px`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 700 });
+    await page.goto("./");
+    await page
+      .getByRole("button", { name: "Session history", exact: true })
+      .click();
+    const dialog = page.getByRole("dialog", {
+      name: "Session history",
+      exact: true,
+    });
+    expect((await dialog.boundingBox())!.width).toBeLessThanOrEqual(width - 30);
+    await expect(dialog.locator(".history-pagination")).toBeInViewport();
+    expect(
+      await dialog.evaluate(
+        (element) => element.scrollWidth <= element.clientWidth,
+      ),
+    ).toBe(true);
+    await page.keyboard.press("Escape");
+    await expect(dialog).toHaveCount(0);
+  });
+}
+
+test("date calendars reopen consistently, switch fields, respect limits, and close without closing history", async ({
+  page,
+}) => {
+  await page.goto("./");
+  await page
+    .getByRole("button", { name: "Session history", exact: true })
+    .click();
+  const history = page.getByRole("dialog", {
+    name: "Session history",
+    exact: true,
+  });
+  const fromButton = history.getByRole("button", {
+    name: "Choose from date",
+    exact: true,
+  });
+  const toButton = history.getByRole("button", {
+    name: "Choose to date",
+    exact: true,
+  });
+  const from = history.getByRole("dialog", {
+    name: "From date calendar",
+    exact: true,
+  });
+  const to = history.getByRole("dialog", {
+    name: "To date calendar",
+    exact: true,
+  });
+  for (let i = 0; i < 4; i++) {
+    await fromButton.click();
+    await expect(from).toBeVisible();
+    await page.keyboard.press("Escape");
+    await expect(from).toHaveCount(0);
+    await expect(history).toBeVisible();
+    await expect(fromButton).toBeFocused();
+  }
+  await fromButton.click();
+  await toButton.click();
+  await expect(from).toHaveCount(0);
+  await expect(to).toBeVisible();
+  await toButton.click();
+  await expect(to).toHaveCount(0);
+  await history.getByLabel("From date", { exact: true }).fill("2026-10-01");
+  await history.getByLabel("To date", { exact: true }).fill("2026-10-07");
+  await fromButton.click();
+  await expect(
+    from.getByRole("gridcell", { name: "2026-10-08", exact: true }),
+  ).toBeDisabled();
+  await from.getByRole("gridcell", { name: "2026-10-03", exact: true }).click();
+  await expect(from).toHaveCount(0);
+  await expect(history.getByLabel("From date", { exact: true })).toHaveValue(
+    "2026-10-03",
+  );
+  await toButton.click();
+  await expect(
+    to.getByRole("gridcell", { name: "2026-10-02", exact: true }),
+  ).toBeDisabled();
+  await history.getByLabel("Subject", { exact: true }).click();
+  await expect(to).toHaveCount(0);
+  await fromButton.click();
+  await page.keyboard.press("ArrowRight");
+  await expect(
+    from.getByRole("gridcell", { name: "2026-10-04", exact: true }),
+  ).toBeFocused();
+  await page.keyboard.press("Enter");
+  await expect(history.getByLabel("From date", { exact: true })).toHaveValue(
+    "2026-10-04",
+  );
+  await history
+    .getByRole("button", { name: "Clear filters", exact: true })
+    .click();
+  await history.getByLabel("From date", { exact: true }).fill("2026-02-30");
+  await expect(
+    history.getByLabel("From date", { exact: true }),
+  ).toHaveAttribute("aria-invalid", "true");
+  await expect(history.getByRole("alert")).toContainText("Enter dates as");
+  await history
+    .getByRole("button", { name: "Clear filters", exact: true })
+    .click();
+  await expect(history.getByRole("alert")).toHaveCount(0);
+  await history
+    .getByRole("button", { name: "Change history", exact: true })
+    .click();
+  await history
+    .getByRole("button", { name: "Add session", exact: true })
+    .click();
+  await history
+    .getByRole("button", { name: "Choose session start date", exact: true })
+    .click();
+  const manual = history.getByRole("dialog", {
+    name: "Session start date calendar",
+    exact: true,
+  });
+  await expect(manual).toBeVisible();
+  await manual
+    .getByLabel("Calendar year", { exact: true })
+    .selectOption("2024");
+  await manual.getByLabel("Calendar month", { exact: true }).selectOption("1");
+  await manual
+    .getByRole("gridcell", { name: "2024-02-29", exact: true })
+    .click();
+  await expect(
+    history.getByLabel("Session start date", { exact: true }),
+  ).toHaveValue("2024-02-29");
+  await expect(history.locator(".manual-session")).toBeVisible();
+  await expect(
+    page.getByRole("dialog", { name: "Session history", exact: true }),
+  ).toBeVisible();
+});
+
+for (const width of [390, 800]) {
+  test(`calendar stays visible and clickable in a ${width}px history window`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width, height: 700 });
+    await page.goto("./");
+    await page
+      .getByRole("button", { name: "Session history", exact: true })
+      .click();
+    const history = page.getByRole("dialog", {
+      name: "Session history",
+      exact: true,
+    });
+    await history
+      .getByRole("button", { name: "Choose to date", exact: true })
+      .click();
+    const calendar = history.getByRole("dialog", {
+      name: "To date calendar",
+      exact: true,
+    });
+    const box = (await calendar.boundingBox())!;
+    expect(box.x).toBeGreaterThanOrEqual(0);
+    expect(box.x + box.width).toBeLessThanOrEqual(width);
+    expect(box.y).toBeGreaterThanOrEqual(0);
+    expect(box.y + box.height).toBeLessThanOrEqual(700);
+    await calendar.getByRole("button", { name: "Today", exact: true }).click();
+    await expect(calendar).toHaveCount(0);
+    await expect(
+      history.getByLabel("To date", { exact: true }),
+    ).not.toHaveValue("");
+    await history.getByLabel("To date", { exact: true }).focus();
+    await page.keyboard.press("Alt+ArrowDown");
+    await expect(calendar).toBeVisible();
+    await calendar
+      .getByRole("button", { name: "Clear date", exact: true })
+      .click();
+    await expect(history.getByLabel("To date", { exact: true })).toHaveValue(
+      "",
+    );
+  });
+}
+
+test("history remembers its interval after closing and restarting the interface", async ({
+  page,
+}) => {
+  await page.goto("./");
+  const open = () =>
+    page.getByRole("button", { name: "Session history", exact: true }).click();
+  const history = page.getByRole("dialog", {
+    name: "Session history",
+    exact: true,
+  });
+  await open();
+  await history.getByLabel("From date", { exact: true }).fill("2026-10-01");
+  await history.getByLabel("To date", { exact: true }).fill("2026-10-07");
+  await expect
+    .poll(() =>
+      page.evaluate(() =>
+        JSON.parse(localStorage.getItem("hyperforest.history-range")!),
+      ),
+    )
+    .toEqual({ from: "2026-10-01", to: "2026-10-07" });
+  await history
+    .getByRole("button", { name: "Close dialog", exact: true })
+    .click();
+  await open();
+  await expect(history.getByLabel("From date", { exact: true })).toHaveValue(
+    "2026-10-01",
+  );
+  await expect(history.getByLabel("To date", { exact: true })).toHaveValue(
+    "2026-10-07",
+  );
+  await history.getByLabel("From date", { exact: true }).fill("2026-");
+  await expect
+    .poll(() =>
+      page.evaluate(() =>
+        JSON.parse(localStorage.getItem("hyperforest.history-range")!),
+      ),
+    )
+    .toEqual({ from: "2026-10-01", to: "2026-10-07" });
+  await page.reload();
+  await open();
+  await expect(history.getByLabel("From date", { exact: true })).toHaveValue(
+    "2026-10-01",
+  );
+  await expect(history.getByLabel("To date", { exact: true })).toHaveValue(
+    "2026-10-07",
+  );
+  await history
+    .getByRole("button", { name: "Clear filters", exact: true })
+    .click();
+  await page.reload();
+  await open();
+  await expect(history.getByLabel("From date", { exact: true })).toHaveValue(
+    "",
+  );
+  await expect(history.getByLabel("To date", { exact: true })).toHaveValue("");
+  await page.evaluate(() =>
+    localStorage.setItem(
+      "hyperforest.history-range",
+      '{"from":"2026-02-30","to":"2026-10-07"}',
+    ),
+  );
+  await page.reload();
+  await open();
+  await expect(history.getByLabel("From date", { exact: true })).toHaveValue(
+    "",
+  );
+  await expect(history.getByRole("alert")).toHaveCount(0);
 });

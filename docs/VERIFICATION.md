@@ -65,9 +65,19 @@ relate it to Rust `u64` results and overflow errors.
    removal; finishing preserves nodes and saves active focus in the finished subtree.
 8. **Link accounting:** dependency-order evaluation agrees with a recursive DAG
    specification. One source session is stored once, even when several views link it.
+9. **History conservation:** for valid saved sessions, unique increasing selected
+   indices, and strictly increasing day boundaries, the sum of daily credits and
+   the sum of session contributions both equal the clipped total. Pauses and
+   active focus contribute zero. Session count includes only positive overlaps;
+   daily averages divide by all supplied days, including empty days. Active-day
+   and session averages are zero for empty denominators, otherwise integer
+   division. Queries leave the input snapshot unchanged and reject overflow.
 
 Tests in `crates/domain/tests/invariants.rs` illustrate these properties, including
 an exhaustive small-graph check. They are examples, not substitutes for proofs.
+`crates/domain/tests/history.rs` also checks history conservation exhaustively
+over small interval partitions. Calendar/DST conversion remains outside this
+arithmetic obligation and has separate interface tests.
 
 ## Environment assumptions
 
