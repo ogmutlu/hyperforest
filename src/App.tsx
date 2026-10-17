@@ -28,7 +28,8 @@ import {
   totals,
 } from "./domainClient";
 import type { Action, GoalNode, State } from "./model";
-import { DesktopWorkspace } from "./desktop";
+import { DesktopWorkspace, desktopEnabled } from "./desktop";
+import { openDesktopArchive, saveArchive } from "./archiveTransfer";
 import { exportArchive, archiveBackup } from "./export";
 import { Graph } from "./Graph";
 import { Icon } from "./icons";
@@ -41,44 +42,6 @@ function download(name: string, text: string, type = "application/json"): void {
   link.download = name;
   link.click();
   setTimeout(() => URL.revokeObjectURL(url), 1000);
-}
-interface SaveWindow extends Window {
-  showSaveFilePicker?: (options: {
-    suggestedName: string;
-    types: { description: string; accept: Record<string, string[]> }[];
-  }) => Promise<FileSystemFileHandle>;
-}
-async function exportBackup(name: string, contents: Uint8Array): Promise<void> {
-  const blob = new Blob([new Uint8Array(contents)], {
-    type: "application/zip",
-  });
-  const picker = (window as SaveWindow).showSaveFilePicker;
-  if (!picker) {
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = name;
-    link.click();
-    setTimeout(() => URL.revokeObjectURL(url), 1000);
-    return;
-  }
-  const file = await picker.call(window, {
-    suggestedName: name,
-    types: [
-      {
-        description: "hyperforest backup",
-        accept: { "application/zip": [".zip"] },
-      },
-    ],
-  });
-  const stream = await file.createWritable();
-  try {
-    await stream.write(blob);
-    await stream.close();
-  } catch (error: unknown) {
-    await stream.abort().catch(() => {});
-    throw error;
-  }
 }
 const ErrorContext = createContext("");
 
@@ -376,8 +339,10 @@ export function App({
     | "options"
     | "history"
     | "clear"
+    | "import"
     | null
   >(null);
+  const [pendingImport, setPendingImport] = useState<State | null>(null);
   const [editing, setEditing] = useState(false);
   const [newParent, setNewParent] = useState("");
   const [newName, setNewName] = useState("");
@@ -489,27 +454,60 @@ export function App({
       setDialog(null);
     }
   };
+  const prepareImport = (contents: Uint8Array): void => {
+    const restored = JSON.parse(archiveBackup(contents)) as State;
+    setPendingImport(restored);
+    setError("");
+    setDialog("import");
+  };
   const importFile = async (file: File | undefined): Promise<void> => {
     if (!file) return;
-    if (
-      !window.confirm(
-        "Replace this workspace with your backup? Export your current workspace first if you want to keep it.",
-      )
-    )
-      return;
     setBusy(true);
     try {
-      const raw = archiveBackup(new Uint8Array(await file.arrayBuffer()));
-      await transact(() => workspace.replace(raw));
-      setError("");
+      prepareImport(new Uint8Array(await file.arrayBuffer()));
+    } catch (reason: unknown) {
+      setError(reason instanceof Error ? reason.message : String(reason));
+    } finally {
+      setBusy(false);
+    }
+  };
+  const importDesktop = async (): Promise<void> => {
+    setBusy(true);
+    try {
+      const contents = await openDesktopArchive();
+      if (contents) prepareImport(contents);
+    } catch (reason: unknown) {
+      setError(reason instanceof Error ? reason.message : String(reason));
+    } finally {
+      setBusy(false);
+    }
+  };
+  const replaceFromBackup = async (): Promise<void> => {
+    if (!pendingImport) return;
+    setBusy(true);
+    try {
+      await transact(() => workspace.replace(JSON.stringify(pendingImport)));
       setSelected(null);
       setTreeId(workspace.getSnapshot().trees[0]?.id ?? "");
-    } catch (exception: unknown) {
-      setError(
-        exception instanceof Error
-          ? exception.message
-          : "This backup could not be restored.",
-      );
+      setFocusMinimized(false);
+      setPendingImport(null);
+      setError("");
+      setDialog(null);
+    } catch (reason: unknown) {
+      setError(reason instanceof Error ? reason.message : String(reason));
+    } finally {
+      setBusy(false);
+    }
+  };
+  const exportWorkspace = async (): Promise<void> => {
+    setBusy(true);
+    try {
+      if (workspace instanceof DesktopWorkspace) await workspace.flush();
+      await saveArchive(exportArchive(workspace.getSnapshot(), Date.now()));
+      setError("");
+    } catch (reason: unknown) {
+      if (!(reason instanceof DOMException && reason.name === "AbortError"))
+        setError(reason instanceof Error ? reason.message : String(reason));
     } finally {
       setBusy(false);
     }
@@ -574,26 +572,9 @@ export function App({
               )}
               <button
                 className="quiet-button"
+                disabled={busy}
                 onClick={() => {
-                  setBusy(true);
-                  const snapshot = workspace.getSnapshot();
-                  const archive = exportArchive(snapshot, Date.now());
-                  void exportBackup("hyperforest-export.zip", archive)
-                    .then(() => {
-                      setError("");
-                    })
-                    .catch((exception: unknown) => {
-                      if (!(
-                        exception instanceof DOMException &&
-                        exception.name === "AbortError"
-                      ))
-                        setError(
-                          exception instanceof Error
-                            ? exception.message
-                            : "Could not export the backup.",
-                        );
-                    })
-                    .finally(() => setBusy(false));
+                  void exportWorkspace();
                 }}
               >
                 <Icon name="download" /> Export
@@ -601,7 +582,10 @@ export function App({
               <button
                 className="quiet-button"
                 disabled={busy}
-                onClick={() => importInput.current?.click()}
+                onClick={() => {
+                  if (desktopEnabled) void importDesktop();
+                  else importInput.current?.click();
+                }}
               >
                 <Icon name="upload" /> Import
               </button>
@@ -1371,6 +1355,49 @@ export function App({
                 }}
               >
                 Delete all local data
+              </button>
+            </div>
+          </Dialog>
+        )}
+        {dialog === "import" && pendingImport && (
+          <Dialog
+            label="Import backup"
+            close={() => {
+              if (!busy) {
+                setPendingImport(null);
+                setDialog(null);
+              }
+            }}
+          >
+            <h2>Replace this workspace?</h2>
+            <p>
+              The backup contains {pendingImport.trees.length} hypertrees,{" "}
+              {pendingImport.nodes.length} vertices with notes, and{" "}
+              {pendingImport.sessions.length} saved sessions.
+            </p>
+            <p>
+              Import replaces the current workspace. Export it first if you want
+              to keep a copy.
+            </p>
+            <div className="dialog-actions">
+              <button
+                className="quiet-button"
+                disabled={busy}
+                onClick={() => {
+                  setPendingImport(null);
+                  setDialog(null);
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                className="primary-button"
+                disabled={busy}
+                onClick={() => {
+                  void replaceFromBackup();
+                }}
+              >
+                Replace workspace
               </button>
             </div>
           </Dialog>

@@ -48,6 +48,12 @@ An existing `workspace.yaml` opens that workspace. An empty
 directory receives the current workspace when changing directories; the old
 directory stays intact. Browser data is separate: use **Export** on the website,
 then **Import** in the desktop app to transfer a current YAML/Markdown ZIP.
+The reverse works too: desktop **Export** opens the native Save dialog and writes
+the same ZIP the web app accepts. Desktop **Import** uses the native Open dialog;
+both apps validate the archive and preview replacement before saving it. Notes,
+session history, graph metadata, and identities travel together. Export first
+saves desktop edits and reads externally edited notes. A running timer is paused
+in the portable copy at export time, while the original timer keeps running.
 
 ```text
 chosen-directory/

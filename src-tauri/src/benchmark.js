@@ -129,12 +129,47 @@
     await wait(() => !document.querySelector(".date-calendar"));
     if (!document.querySelector(".manual-session")) throw new Error("Calendar accidentally submitted the session form");
     document.querySelector('[aria-label="Close dialog"]').click();
+    await wait(() => !document.querySelector('.history-dialog[open]'));
+    const menuAction = async (name) => {
+      const menu = document.querySelector('[aria-label="Workspace actions"]');
+      menu.click();
+      await wait(() => menu.parentElement.open);
+      click(name);
+    };
+    await menuAction("Export");
+    let exportedBytes;
+    const exportStart = performance.now();
+    while (!exportedBytes) {
+      try { exportedBytes = await window.__TAURI_INTERNALS__.invoke("desktop_import_archive"); }
+      catch (error) { if (performance.now() - exportStart > 30000) throw error; await new Promise((resolve) => setTimeout(resolve, 20)); }
+    }
+    if (exportedBytes[0] !== 80 || exportedBytes[1] !== 75) throw new Error("Native export did not write a ZIP file");
+    await wait(() => ![...document.querySelectorAll("button")].find((button) => button.textContent.trim() === "Export").disabled);
+    document.querySelector('[aria-label="Rename selected vertex"]').click();
+    await wait(() => document.querySelector('[aria-label="Vertex name"]'));
+    const renamed = document.querySelector('[aria-label="Vertex name"]');
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value").set.call(renamed, "Changed after export");
+    renamed.dispatchEvent(new Event("input", { bubbles: true }));
+    await frame();
+    renamed.form.requestSubmit();
+    await wait(() => !document.querySelector(".inline-rename"));
+    await menuAction("Import");
+    await wait(() => document.querySelector('dialog[aria-label="Import backup"]'));
+    click("Cancel");
+    await wait(() => !document.querySelector('dialog[aria-label="Import backup"]'));
+    if (!document.querySelector('.node-heading').textContent.includes("Changed after export")) throw new Error("Cancelled import changed the workspace");
+    await menuAction("Import");
+    await wait(() => document.querySelector('dialog[aria-label="Import backup"]'));
+    click("Replace workspace");
+    await wait(() => !document.querySelector('dialog[aria-label="Import backup"]') && document.querySelector('.node-heading').textContent.includes("Benchmark edit 3"));
+    if (document.querySelector('[role="alert"]')) throw new Error(document.querySelector('[role="alert"]').textContent);
     document.querySelector('[aria-label="Zoom interface in"]').click();
     await wait(() => localStorage.getItem("hyperforest.interface-zoom") === "1.1");
     const report = { engine: navigator.userAgent, vertices: 500, devicePixelRatio: initialDevicePixelRatio,
       startupToSavedGraphMs, idleFrames, zoomFrames, editAndSaveMs: editsMs,
       focusKeyboardAndTrayChecks: "passed: running, paused, resumed, saved; native tray updates succeeded",
       calendarChecks: "passed: repeated open/close, Escape isolation, switching fields, selection, viewport bounds, manual-session date selection",
+      archiveChecks: "passed: production native ZIP write/read paths, export through interface, cancelled import preserves data, confirmed import restores the workspace",
       note: "Visible production Tauri/WebKit window. Includes real Rust WASM, IPC, reports, disk writes, and daily backup updates. Frame intervals include display pacing." };
     sessionStorage.setItem("hyperforest-benchmark-before-reload", JSON.stringify(report));
     location.reload();

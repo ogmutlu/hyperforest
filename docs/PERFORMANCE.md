@@ -55,6 +55,11 @@ After the measured intervals, the harness also checks the real history table and
 statistics, modal scroll isolation, and interface zoom persistence through a
 WebView reload. It also checks repeated calendar opening/dismissal, field
 switching, manual-session date selection, and restoring the selected interval.
+It exercises export/import through the interface and the production native ZIP
+read/write commands, using a fixed file under the temporary directory in place
+of manual Save/Open selection. Cancelled replacement and confirmed restoration
+are checked. The browser transfer test uses real web file upload/download and
+archive/domain code, with only desktop OS file transport mocked.
 These checks do not enter the frame or edit/save measurements.
 The browser regression suite separately exercises 1,205 saved sessions, bounded
 100-row pages, filtering/statistics, background scroll isolation, and narrower

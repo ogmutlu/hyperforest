@@ -77,6 +77,10 @@ simple.yaml        derived names, hierarchy, and readable durations
 ```
 
 **Import** accepts this ZIP format. No older formats or migrations are supported.
+Desktop Export/Import use native Save/Open dialogs. The web app downloads/uploads
+the same ZIP, so either app can restore the other's export. Import previews the
+archive before replacing the current workspace. A running timer is paused only in
+the exported copy; it does not accrue time while the backup is being transferred.
 The browser stores its current in-memory snapshot in localStorage; it can exchange
 workspaces with desktop through these ZIPs. JSON is used for internal transport,
 not as an alternative backup format.

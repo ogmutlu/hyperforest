@@ -142,6 +142,15 @@ Today counter belongs to the header; goal totals belong to the selection.
 
 `workspaceFiles.ts` is the shared codec for `workspace.yaml` plus `notes/*.md`.
 `export.ts` creates ZIPs and the derived `structure.yaml` and `simple.yaml` reports.
+`archiveTransfer.ts` selects host transport: browser download/Save As, or native
+commands in `src-tauri/src/archive.rs`. Native Save/Open dialogs and binary file
+I/O run off the UI thread; ZIP encoding and validation stay shared. The desktop
+flushes its workspace before export, including external Markdown edits. A running
+focus is paused in the exported copy using the existing Rust command, so restoring
+an archive does not count the time spent moving it. The source timer keeps running.
+Import validates the ZIP and shows a replacement preview before the ordinary
+`Workspace.replace` persistence path. Cancelled dialogs do not replace data;
+file errors remain visible. There is no separate desktop archive schema.
 `desktop.ts` coordinates native storage. `store.rs` owns locking, atomic individual
 file replacement, external-edit checks, and daily backups. Multi-file saves are
 not a filesystem transaction: a process or disk failure can interrupt a save

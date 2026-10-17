@@ -1,3 +1,4 @@
+import { installDesktopMock } from "./desktopHarness";
 import "../setup";
 import { sampleWorkspace } from "../sampleWorkspace";
 import { expect, test } from "@playwright/test";
@@ -886,7 +887,7 @@ test("export downloads directly without an app dialog", async ({ page }) => {
   await expect(page.getByRole("dialog")).toHaveCount(0);
 });
 
-test("export writes a backup through the native Save As API", async ({
+test("export writes a backup through the browser Save As API", async ({
   page,
 }) => {
   await page.addInitScript(() =>
@@ -1328,96 +1329,7 @@ test("pedantic and finished show separate explanations only on hover or keyboard
 test("desktop uses selected YAML and Markdown storage rather than browser workspace data", async ({
   page,
 }) => {
-  await page.addInitScript(() => {
-    const callbacks = new Map<number, (event: { payload: string }) => void>();
-    const handlers = new Map<number, { event: string; handler: number }>();
-    let nextId = 1;
-    Object.assign(window, {
-      isTauri: true,
-      __TAURI_EVENT_PLUGIN_INTERNALS__: {
-        unregisterListener: (_event: string, id: number) => handlers.delete(id),
-      },
-      testTrayAction: (payload: string) => {
-        for (const item of handlers.values())
-          if (item.event === "hyperforest-tray-action")
-            callbacks.get(item.handler)?.({ payload });
-      },
-      __TAURI_INTERNALS__: {
-        transformCallback: (callback: (event: { payload: string }) => void) => {
-          const id = nextId++;
-          callbacks.set(id, callback);
-          return id;
-        },
-        unregisterCallback: (id: number) => callbacks.delete(id),
-        metadata: {
-          currentWebview: { label: "main" },
-          currentWindow: { label: "main" },
-        },
-        invoke: async (
-          command: string,
-          args: {
-            directory?: string;
-            request?: { yaml: string; notes: Record<string, string> };
-            value?: number;
-            event?: string;
-            handler?: number;
-            eventId?: number;
-            running?: boolean;
-            paused?: boolean;
-          },
-        ) => {
-          const key = "test.desktop.files";
-          if (command === "plugin:event|listen") {
-            const id = nextId++;
-            handlers.set(id, { event: args.event!, handler: args.handler! });
-            return id;
-          }
-          if (command === "plugin:event|unlisten") {
-            handlers.delete(args.eventId!);
-            return null;
-          }
-          if (command === "desktop_tray_state") {
-            localStorage.setItem("test.tray-state", JSON.stringify(args));
-            return null;
-          }
-          if (command === "desktop_quit") {
-            localStorage.setItem("test.quit", "yes");
-            return null;
-          }
-          if (command === "desktop_show_window") return null;
-          if (command === "plugin:webview|set_webview_zoom") {
-            localStorage.setItem("test.zoom", String(args.value));
-            return null;
-          }
-          if (command === "desktop_load")
-            return JSON.parse(localStorage.getItem(key) ?? "null");
-          if (command === "plugin:dialog|open")
-            return "/tmp/hyperforest-desktop-test";
-          if (command === "desktop_select")
-            return { directory: args.directory, yaml: null, notes: {} };
-          if (command === "desktop_save") {
-            if (localStorage.getItem("test.fail-save") === "yes")
-              throw new Error("Disk is full");
-            if (args.directory !== "/tmp/hyperforest-desktop-test")
-              throw new Error("desktop_save requires the selected directory");
-            const loaded = {
-              directory: "/tmp/hyperforest-desktop-test",
-              yaml: args.request!.yaml,
-              notes: args.request!.notes,
-            };
-            localStorage.setItem(key, JSON.stringify(loaded));
-            return loaded;
-          }
-          if (command === "desktop_enable_backups") return null;
-          if (command === "desktop_open_note") {
-            localStorage.setItem("test.opened-note", "yes");
-            return null;
-          }
-          throw new Error(`Unexpected command ${command}`);
-        },
-      },
-    });
-  });
+  await installDesktopMock(page);
   await page.goto("./");
   await page
     .getByRole("button", { name: "Zoom interface in", exact: true })

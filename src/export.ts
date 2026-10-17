@@ -2,7 +2,7 @@ import { stringify } from "yaml";
 import { readWorkspace, workspaceFiles } from "./workspaceFiles";
 import { strToU8, strFromU8, zipSync, unzipSync } from "fflate";
 import { assignedNodeColors, formatTime, formatHms } from "./presentation";
-import { totals } from "./domainClient";
+import { apply, totals } from "./domainClient";
 import type { GoalNode, State } from "./model";
 
 /** Detailed derived report, separate from the editable workspace YAML. */
@@ -61,6 +61,10 @@ export function structureYaml(state: State, now: number): string {
 }
 
 export function exportArchive(state: State, now: number): Uint8Array {
+  // A portable snapshot must not accrue time while it is being moved between
+  // apps/devices. Pause the copy at this clock sample; the source keeps running.
+  if (state.focus?.runningSince != null)
+    state = apply(state, { type: "pause" }, now);
   const payload = workspaceFiles(state);
   const files: Record<string, Uint8Array> = {
     "workspace.yaml": strToU8(payload.yaml),

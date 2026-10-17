@@ -1,5 +1,5 @@
 import { expect, it } from "vitest";
-import { apply } from "../src/domainClient";
+import { apply, focusElapsed } from "../src/domainClient";
 import type { State } from "../src/model";
 import { structureYaml } from "../src/export";
 
@@ -173,4 +173,36 @@ it("simple.yaml contains only readable hierarchy, durations and goal status", as
   );
   const files = unzipSync(exportArchive(state, 70000));
   expect(strFromU8(files["simple.yaml"]!)).toBe(report);
+});
+
+it("portable exports freeze a running timer without pausing or changing the source", async () => {
+  const { exportArchive, archiveBackup } = await import("../src/export");
+  let state: State = {
+    version: 1,
+    trees: [],
+    nodes: [],
+    sessions: [],
+    focus: null,
+  };
+  state = apply(state, { type: "create", id: "root", title: "Research" }, 1000);
+  state = apply(state, { type: "start", id: "root" }, 2000);
+  state = apply(state, { type: "pause" }, 3000);
+  state = apply(state, { type: "start", id: "root" }, 5000);
+  const restored = JSON.parse(
+    archiveBackup(exportArchive(state, 7000)),
+  ) as State;
+  expect(restored.focus).toMatchObject({
+    runningSince: null,
+    elapsedMs: 3000,
+    periods: [
+      { start: 2000, end: 3000 },
+      { start: 5000, end: 7000 },
+    ],
+  });
+  expect(focusElapsed(restored.focus!, 3_600_000)).toBe(3000);
+  expect(state.focus).toMatchObject({
+    runningSince: 5000,
+    elapsedMs: 1000,
+    periods: [{ start: 2000, end: 3000 }],
+  });
 });

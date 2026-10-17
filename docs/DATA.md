@@ -121,3 +121,9 @@ The browser uses localStorage for its working snapshot and Web Locks for
 cooperating tabs when the API is available. Export a ZIP to move it to desktop or
 to keep a portable copy. Import requires the current `workspace.yaml` and its notes;
 reports are regenerated and are not an alternative import format.
+Both hosts share this archive codec. The desktop uses native Save/Open dialogs,
+and import requires confirmation before replacing the workspace. A portable
+export closes the running focus interval at its explicit export timestamp and
+stores that focus as paused, using the Rust domain's pause operation. Export does
+not pause the live source workspace. Resuming an imported focus begins a new
+interval; offline transfer time is excluded.

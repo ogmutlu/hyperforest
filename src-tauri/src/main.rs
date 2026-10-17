@@ -1,7 +1,9 @@
+mod archive;
 #[cfg(feature = "benchmark")]
 mod benchmark;
 mod store;
 mod tray;
+use archive::{desktop_export_archive, desktop_import_archive};
 use std::{
     path::{Path, PathBuf},
     sync::Mutex,
@@ -198,6 +200,8 @@ fn main() {
             }
         })
         .invoke_handler(tauri::generate_handler![
+            desktop_export_archive,
+            desktop_import_archive,
             desktop_tray_state,
             desktop_show_window,
             desktop_quit,
@@ -210,6 +214,8 @@ fn main() {
         ]);
     #[cfg(not(feature = "benchmark"))]
     let builder = builder.invoke_handler(tauri::generate_handler![
+        desktop_export_archive,
+        desktop_import_archive,
         desktop_tray_state,
         desktop_show_window,
         desktop_quit,

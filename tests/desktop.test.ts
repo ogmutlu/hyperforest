@@ -150,3 +150,79 @@ it("does not change visible state when disk writes fail and serializes successfu
     "b",
   ]);
 });
+
+it("desktop and web exchange the same ZIP in both directions without losing notes or history", async () => {
+  const { exportArchive, archiveBackup } = await import("../src/export");
+  const { Workspace } = await import("../src/storage");
+  let state = example();
+  state = apply(
+    state,
+    { type: "add", id: "child", parentId: "root", title: "Logic" },
+    1100,
+  );
+  state = apply(
+    state,
+    {
+      type: "edit",
+      id: "child",
+      title: "Logic",
+      notes: "# Proofs\nÖğuz ∀ x → x\n",
+      estimateMinutes: 25,
+    },
+    1200,
+  );
+  state = apply(state, { type: "start", id: "child" }, 2000);
+  state = apply(state, { type: "pause" }, 4000);
+  state = apply(state, { type: "start", id: "child" }, 6000);
+  state = apply(state, { type: "finish", id: "session" }, 8000);
+  const payload = diskPayload(state, 9000);
+  const desktop = new DesktopWorkspace({
+    directory: "/tmp/transfer-test",
+    yaml: payload.yaml,
+    notes: payload.notes,
+  });
+  const values = new Map<string, string>();
+  const web = new Workspace({
+    getItem: (key) => values.get(key) ?? null,
+    setItem: (key, value) => {
+      values.set(key, value);
+    },
+    removeItem: (key) => {
+      values.delete(key);
+    },
+  });
+  web.replace(archiveBackup(exportArchive(desktop.getSnapshot(), 10000)));
+  expect(web.getSnapshot()).toEqual(desktop.getSnapshot());
+  web.commit(
+    {
+      type: "edit",
+      id: "child",
+      title: "Edited on web",
+      notes: "# Web notes\nPreserve Markdown and Unicode: λ",
+      estimateMinutes: 40,
+    },
+    11000,
+  );
+  ipc.mockImplementation(
+    async (
+      command: string,
+      args: { request: ReturnType<typeof diskPayload> },
+    ) => {
+      expect(command).toBe("desktop_save");
+      return {
+        directory: "/tmp/transfer-test",
+        yaml: args.request.yaml,
+        notes: args.request.notes,
+      };
+    },
+  );
+  await desktop.replace(archiveBackup(exportArchive(web.getSnapshot(), 12000)));
+  expect(desktop.getSnapshot()).toEqual(web.getSnapshot());
+  expect(desktop.getSnapshot().sessions[0]!.periods).toEqual([
+    { start: 2000, end: 4000 },
+    { start: 6000, end: 8000 },
+  ]);
+  expect(
+    desktop.getSnapshot().nodes.find((node) => node.id === "child")!.notes,
+  ).toContain("λ");
+});
