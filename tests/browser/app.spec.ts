@@ -5,6 +5,19 @@ import type { Page } from "@playwright/test";
 import { DEFAULT_COLORS } from "../../src/presentation";
 import { apply } from "../../src/domainClient";
 
+async function goalAction(page: Page, name: string): Promise<void> {
+  await page.getByLabel("Goal actions", { exact: true }).click();
+  await page.getByRole("button", { name, exact: true }).click();
+}
+async function workspaceAction(page: Page, name: string): Promise<void> {
+  await page.getByLabel("Workspace actions", { exact: true }).click();
+  await page.getByRole("button", { name, exact: true }).click();
+}
+async function pauseAndMinimize(page: Page): Promise<void> {
+  await page.getByRole("button", { name: "Pause", exact: true }).click();
+  await page.getByRole("button", { name: "Minimize", exact: true }).click();
+}
+
 async function focusVertex(page: Page, title: string): Promise<void> {
   await page
     .getByRole("button", { name: `Select ${title}`, exact: true })
@@ -56,7 +69,7 @@ async function graphOption(
   name: "pedantic" | "finished",
   enabled?: boolean,
 ): Promise<void> {
-  await page.getByRole("button", { name: "Options", exact: true }).click();
+  await goalAction(page, "Options");
   const dialog = page.getByRole("dialog", { name: "Graph options" });
   const toggle = dialog.getByRole("switch", { name, exact: true });
   if (enabled === undefined) await toggle.click();
@@ -114,24 +127,18 @@ test.beforeEach(async ({ page }) => {
   }, fixture);
 });
 
-test("simple filled vertices and fixed menu slots survive mode and selection changes", async ({
+test("simple filled vertices and selection controls survive mode and selection changes", async ({
   page,
 }) => {
   await page.goto("./");
   const menu = page.locator(".inspector");
-  const controls = [
-    menu,
-    page.locator(".inspector-summary"),
-    page.locator(".inspector-actions"),
-    page.getByRole("button", { name: "Vertex color", exact: true }),
-    page.getByRole("button", { name: "Options", exact: true }),
-  ];
-  const positions = await Promise.all(
-    controls.map((control) => control.boundingBox()),
-  );
   const check = async (): Promise<void> => {
-    for (const [index, control] of controls.entries())
-      expect(await control.boundingBox()).toEqual(positions[index]);
+    await expect(
+      menu.getByRole("button", { name: "Focus", exact: true }),
+    ).toBeVisible();
+    await expect(
+      menu.getByRole("button", { name: "Edit goal", exact: true }),
+    ).toBeVisible();
     await expect(page.locator(".goal [role=button]")).toHaveCount(9);
     await expect(
       page.locator(
@@ -188,7 +195,7 @@ test("pedantic explains the definition and rejects disconnected color groups", a
 }) => {
   await page.goto("./");
   const toggle = page.getByRole("switch", { name: "pedantic", exact: true });
-  await page.getByRole("button", { name: "Options", exact: true }).click();
+  await goalAction(page, "Options");
   await toggle.hover();
   await expect(page.getByRole("tooltip")).toContainText("connected subtree");
   await expect(page.getByRole("tooltip")).toContainText(/separate hypertrees/);
@@ -355,7 +362,7 @@ test("vertices reach both canvas edges and the top menu changes color", async ({
   await expect(body).toHaveAttribute("fill", "#7c83ff");
   await expect(
     page.getByRole("button", { name: "Vertex color", exact: true }),
-  ).toBeDisabled();
+  ).toHaveCount(0);
 });
 
 test("hyperforest supports isolated colored vertices, notes and a full-width canvas", async ({
@@ -365,7 +372,7 @@ test("hyperforest supports isolated colored vertices, notes and a full-width can
   await expect(page).toHaveTitle(/hyperforest/);
   await expect(
     page.getByRole("button", { name: "New vertex", exact: true }),
-  ).toBeDisabled();
+  ).toHaveCount(0);
   await page.getByRole("button", { name: "Edit graph", exact: true }).click();
   await page.getByRole("button", { name: "New vertex", exact: true }).click();
   await page.getByLabel("Goal name", { exact: true }).fill("Independent");
@@ -564,34 +571,38 @@ test("finishing preserves a child as a ghost, frees its name, and retains parent
   await page.goto("./");
   await focusVertex(page, "Read & wonder");
   await expect(page.getByTestId("focus-timer")).not.toHaveText("00:00:00");
-  await page.getByRole("button", { name: "Pause & return" }).click();
+  await pauseAndMinimize(page);
   await page
     .getByRole("button", { name: "Select Discover", exact: true })
     .click();
-  const parentTime = await page.locator(".time-stat > span").innerText();
+  const parentTime = await page
+    .locator(".time-stat > :first-child")
+    .innerText();
   expect(parentTime).not.toBe("0m");
   await page
     .getByRole("button", { name: "Select Read & wonder", exact: true })
     .click();
   await page.getByRole("button", { name: "Edit graph", exact: true }).click();
-  await page.getByRole("button", { name: "Finish goal", exact: true }).click();
+  await goalAction(page, "Finish goal");
   await page
     .getByRole("dialog", { name: "Finish goal" })
     .getByRole("button", { name: "Finish goal", exact: true })
     .click();
   await expect(page.getByTestId("node-read")).toHaveCount(0);
   await expect(page.locator(".inspector h2")).toHaveText("Discover");
-  await expect(page.locator(".time-stat > span")).toHaveText(parentTime);
-  await expect(page.locator(".paused-dock")).toHaveCount(0);
+  await expect(page.locator(".time-stat > :first-child")).toHaveText(
+    parentTime,
+  );
+  await expect(page.locator(".focus-dock")).toHaveCount(0);
   await page.reload();
   await expect(page.getByTestId("node-read")).toHaveCount(0);
   await page
     .getByRole("button", { name: "Select Discover", exact: true })
     .click();
-  await expect(page.locator(".time-stat > span")).toHaveText(parentTime);
-  await page
-    .getByRole("button", { name: "Session history", exact: true })
-    .click();
+  await expect(page.locator(".time-stat > :first-child")).toHaveText(
+    parentTime,
+  );
+  await workspaceAction(page, "Session history");
   await expect(page.locator(".history-list")).toContainText("Read & wonder");
   await page.getByRole("button", { name: "Close dialog", exact: true }).click();
   await graphOption(page, "finished");
@@ -655,7 +666,7 @@ test("Ctrl + scroll zooms the graph while ordinary scrolling stays native", asyn
   await expect(camera).toHaveAttribute("transform", original ?? "");
 });
 
-test("drags persist and start expands; pause contracts without losing time", async ({
+test("drags persist and paused focus survives minimizing and reloading", async ({
   page,
 }) => {
   const errors: string[] = [];
@@ -688,25 +699,27 @@ test("drags persist and start expands; pause contracts without losing time", asy
   await expect(
     page.getByRole("dialog", { name: "Focus session" }),
   ).toBeVisible();
-  await expect(page.locator(".focus-screen")).toHaveClass(/expanded/);
+  await expect(page.locator(".focus-screen")).toBeVisible();
   await expect(page.getByTestId("focus-timer")).not.toHaveText("00:00:00", {
     timeout: 5000,
   });
   await page.screenshot({ path: "/tmp/hyperforest-focus.png", fullPage: true });
-  await page.getByRole("button", { name: "Pause & return" }).click();
+  await pauseAndMinimize(page);
   await expect(page.getByRole("dialog", { name: "Focus session" })).toHaveCount(
     0,
   );
-  await expect(page.locator(".paused-dock")).toBeVisible();
+  await expect(page.locator(".focus-dock")).toBeVisible();
   await page.reload();
-  await expect(page.locator(".paused-dock")).toBeVisible();
+  await expect(
+    page.getByRole("dialog", { name: "Focus session" }),
+  ).toContainText("Paused");
   await page.getByRole("button", { name: "Resume", exact: true }).click();
-  await expect(page.locator(".focus-screen")).toHaveClass(/expanded/);
-  await page.getByRole("button", { name: "Save session", exact: true }).click();
-  await expect(page.locator(".paused-dock")).toHaveCount(0);
+  await expect(page.locator(".focus-screen")).toBeVisible();
   await page
-    .getByRole("button", { name: "Session history", exact: true })
+    .getByRole("button", { name: "Save & finish", exact: true })
     .click();
+  await expect(page.locator(".focus-dock")).toHaveCount(0);
+  await workspaceAction(page, "Session history");
   await expect(page.locator(".history-list")).toContainText("Read & wonder");
   expect(errors).toEqual([]);
 });
@@ -762,8 +775,8 @@ test("fits on mobile without horizontal overflow", async ({ page }) => {
     ),
   ).toBe(true);
   await focusVertex(page, "Create");
-  await page.getByRole("button", { name: "Pause & return" }).click();
-  await expect(page.locator(".paused-dock")).toBeVisible();
+  await pauseAndMinimize(page);
+  await expect(page.locator(".focus-dock")).toBeVisible();
 });
 
 test("duplicate children show a visible error without changing saved data", async ({
@@ -795,11 +808,11 @@ test("double click focuses a vertex in normal and edit modes", async ({
   await vertex.click();
   await expect(page.locator(".focus-screen")).toHaveCount(0);
   await vertex.dblclick();
-  await expect(page.locator(".focus-screen")).toHaveClass(/expanded/);
-  await page.getByRole("button", { name: "Pause & return" }).click();
+  await expect(page.locator(".focus-screen")).toBeVisible();
+  await pauseAndMinimize(page);
   await page.getByRole("button", { name: "Edit graph", exact: true }).click();
   await vertex.dblclick();
-  await expect(page.locator(".focus-screen")).toHaveClass(/expanded/);
+  await expect(page.locator(".focus-screen")).toBeVisible();
 });
 
 test("clear local data requires confirmation and stays empty after reload", async ({
@@ -807,7 +820,7 @@ test("clear local data requires confirmation and stays empty after reload", asyn
 }) => {
   await page.goto("./");
   await focusVertex(page, "Read & wonder");
-  await page.getByRole("button", { name: "Pause & return" }).click();
+  await pauseAndMinimize(page);
   await page.evaluate(() => {
     localStorage.setItem("unrelated-data", "keep");
   });
@@ -817,7 +830,7 @@ test("clear local data requires confirmation and stays empty after reload", asyn
   const before = await page.evaluate(() =>
     localStorage.getItem("hyperforest.workspace.v1"),
   );
-  await page.getByText("Saved on this device", { exact: true }).hover();
+  await page.getByLabel("Workspace actions", { exact: true }).click();
   await page
     .getByRole("button", { name: "Clear local data", exact: true })
     .click();
@@ -832,7 +845,7 @@ test("clear local data requires confirmation and stays empty after reload", asyn
   expect(
     await page.evaluate(() => localStorage.getItem("hyperforest.workspace.v1")),
   ).toBe(before);
-  await page.getByText("Saved on this device", { exact: true }).hover();
+  await page.getByLabel("Workspace actions", { exact: true }).click();
   await page
     .getByRole("button", { name: "Clear local data", exact: true })
     .click();
@@ -844,7 +857,7 @@ test("clear local data requires confirmation and stays empty after reload", asyn
       name: "Every hypertree starts with one idea.",
     }),
   ).toBeVisible();
-  await expect(page.locator(".paused-dock")).toHaveCount(0);
+  await expect(page.locator(".focus-dock")).toHaveCount(0);
   expect(
     await page.evaluate(() => localStorage.getItem("unrelated-data")),
   ).toBe("keep");
@@ -865,7 +878,7 @@ test("export downloads directly without an app dialog", async ({ page }) => {
   );
   await page.goto("./");
   const download = page.waitForEvent("download");
-  await page.getByRole("button", { name: "Export", exact: true }).click();
+  await workspaceAction(page, "Export");
   expect((await download).suggestedFilename()).toBe("hyperforest-export.zip");
   await expect(page.getByRole("dialog")).toHaveCount(0);
 });
@@ -884,7 +897,7 @@ test("export writes a backup through the native Save As API", async ({
     }),
   );
   await page.goto("./");
-  await page.getByRole("button", { name: "Export", exact: true }).click();
+  await workspaceAction(page, "Export");
   await expect(page.getByRole("dialog")).toHaveCount(0);
   await expect
     .poll(() =>
@@ -906,22 +919,25 @@ test("export writes a backup through the native Save As API", async ({
     .toEqual([80, 75]);
 });
 
-test("focus tab title shows only the timer and updates every second", async ({
+test("focus title and global Today update while running and freeze while paused", async ({
   page,
 }) => {
   await page.goto("./");
+  await expect(
+    page.getByRole("button", { name: "Focus", exact: true }),
+  ).toBeVisible();
   await page.clock.install();
   await focusVertex(page, "Read & wonder");
-  await expect(page).toHaveTitle("00:00:00");
+  await expect(page).toHaveTitle("00:00:00 — hyperforest");
   await page.clock.runFor(1000);
-  await expect(page).toHaveTitle("00:00:01");
+  await expect(page).toHaveTitle("00:00:01 — hyperforest");
   await page.clock.runFor(1000);
-  await expect(page).toHaveTitle("00:00:02");
-  await expect(page.getByTestId("today-time")).toHaveText("TODAY0h0m2s");
-  await page.getByRole("button", { name: "Pause & return" }).click();
-  await expect(page).toHaveTitle("hyperforest — a little structure");
+  await expect(page).toHaveTitle("00:00:02 — hyperforest");
+  await expect(page.getByTestId("today-time")).toHaveText(/Today\s*0h 0m/);
+  await pauseAndMinimize(page);
+  await expect(page).toHaveTitle("Paused · 00:00:02 — hyperforest");
   await page.clock.runFor(2000);
-  await expect(page).toHaveTitle("hyperforest — a little structure");
+  await expect(page).toHaveTitle("Paused · 00:00:02 — hyperforest");
 });
 
 test("graph options preserve pedantic settings and edge dragging enforces connectivity", async ({
@@ -1018,30 +1034,15 @@ test("reorders tabs and routes linked focus to its source root", async ({
   await page
     .getByRole("button", { name: "Create hypertree", exact: true })
     .click();
-  const rearrange = await page
-    .getByRole("button", { name: "Rearrange tabs", exact: true })
-    .boundingBox();
-  const create = await page
-    .getByRole("button", { name: "New hypertree", exact: true })
-    .boundingBox();
-  const history = await page
-    .getByRole("button", { name: "Session history", exact: true })
-    .boundingBox();
-  expect(rearrange!.x + rearrange!.width).toBeLessThanOrEqual(create!.x);
-  expect(create!.x + create!.width).toBeLessThanOrEqual(history!.x);
-  expect(
-    Math.abs(
-      create!.y + create!.height / 2 - (history!.y + history!.height / 2),
-    ),
-  ).toBeLessThan(1);
+  await expect(
+    page.getByRole("button", { name: "Rearrange tabs", exact: true }),
+  ).toBeHidden();
   await expect(
     page
       .getByRole("tablist")
       .getByRole("button", { name: "New hypertree", exact: true }),
   ).toHaveCount(0);
-  await page
-    .getByRole("button", { name: "Rearrange tabs", exact: true })
-    .click();
+  await workspaceAction(page, "Rearrange tabs");
   await page
     .getByRole("button", { name: "Move Container earlier", exact: true })
     .click();
@@ -1064,9 +1065,7 @@ test("reorders tabs and routes linked focus to its source root", async ({
       ),
     )
     .toBe("project");
-  await page
-    .getByRole("button", { name: "Pause & return", exact: true })
-    .click();
+  await pauseAndMinimize(page);
 });
 
 test("export includes the current YAML workspace, structure report, and notes", async ({
@@ -1081,7 +1080,7 @@ test("export includes the current YAML workspace, structure report, and notes", 
   await page.goto("./");
   const downloads: string[] = [];
   page.on("download", (file) => downloads.push(file.suggestedFilename()));
-  await page.getByRole("button", { name: "Export", exact: true }).click();
+  await workspaceAction(page, "Export");
   await expect.poll(() => downloads).toEqual(["hyperforest-export.zip"]);
   await expect(page.getByRole("dialog")).toHaveCount(0);
 });
@@ -1121,9 +1120,7 @@ test("session history combines date and subject filters and can clear them", asy
     localStorage.setItem("hyperforest.workspace.v1", JSON.stringify(state));
   });
   await page.goto("./");
-  await page
-    .getByRole("button", { name: "Session history", exact: true })
-    .click();
+  await workspaceAction(page, "Session history");
   const history = page.locator(".history-list article");
   await expect(history).toHaveCount(3);
   await page.getByLabel("From date", { exact: true }).fill("2026-10-07");
@@ -1142,40 +1139,39 @@ test("session history combines date and subject filters and can clear them", asy
   await expect(history).toHaveCount(3);
 });
 
-test("Today stays global across selections and sits above Focus in the same counter font", async ({
+test("Today is global in the header and opens today's history", async ({
   page,
 }) => {
   await page.goto("./");
+  await expect(
+    page.getByRole("button", { name: "Focus", exact: true }),
+  ).toBeVisible();
   await page.clock.install();
   await focusVertex(page, "Read & wonder");
-  await page.clock.runFor(3000);
-  await page
-    .getByRole("button", { name: "Pause & return", exact: true })
-    .click();
-  const pausedToday = await page.locator(".today-counter").innerText();
-  expect(pausedToday).not.toBe("0h0m0s");
+  await page.clock.runFor(63000);
+  await pauseAndMinimize(page);
+  const today = page.getByTestId("today-time");
+  const pausedToday = await today.locator(".today-counter").innerText();
+  expect(pausedToday).toContain("0h 1m");
   await page
     .getByRole("button", { name: "Select Test project", exact: true })
     .click();
-  await expect(page.locator(".today-counter")).toHaveText(pausedToday);
-  const today = await page.getByTestId("today-time").boundingBox();
-  const focus = await page
-    .getByRole("button", { name: "Focus", exact: true })
-    .boundingBox();
-  expect(today!.y + today!.height).toBeLessThanOrEqual(focus!.y);
-  const family = await page
-    .locator(".time-stat > span")
-    .evaluate((element) => getComputedStyle(element).fontFamily);
-  await expect(page.locator(".today-counter")).toHaveCSS("font-family", family);
+  await expect(today.locator(".today-counter")).toHaveText(pausedToday);
+  await expect(page.locator("header").getByTestId("today-time")).toBeVisible();
+  await today.click();
+  const day = await page.evaluate(() => {
+    const date = new Date();
+    return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+  });
+  await expect(page.getByLabel("From date", { exact: true })).toHaveValue(day);
+  await expect(page.getByLabel("To date", { exact: true })).toHaveValue(day);
 });
 
 test("change history adds a persistent session and confirms deletion", async ({
   page,
 }) => {
   await page.goto("./");
-  await page
-    .getByRole("button", { name: "Session history", exact: true })
-    .click();
+  await workspaceAction(page, "Session history");
   await page
     .getByRole("button", { name: "Change history", exact: true })
     .click();
@@ -1190,10 +1186,8 @@ test("change history adds a persistent session and confirms deletion", async ({
   await expect(page.locator(".history-list article")).toHaveCount(1);
   await expect(page.locator(".history-list")).toContainText("Read & wonder");
   await page.reload();
-  await expect(page.locator(".today-counter")).toHaveText("0h1m5s");
-  await page
-    .getByRole("button", { name: "Session history", exact: true })
-    .click();
+  await expect(page.locator(".today-counter")).toHaveText("0h 1m");
+  await workspaceAction(page, "Session history");
   await expect(page.locator(".history-list article")).toHaveCount(1);
   await page
     .getByRole("button", { name: "Change history", exact: true })
@@ -1211,7 +1205,7 @@ test("change history adds a persistent session and confirms deletion", async ({
     .click();
   await expect(page.locator(".history-list article")).toHaveCount(0);
   await page.reload();
-  await expect(page.locator(".today-counter")).toHaveText("0h0m0s");
+  await expect(page.locator(".today-counter")).toHaveText("0h 0m");
 });
 
 test("new vertex chooses a parent in its dialog and submits with Add vertex", async ({
@@ -1246,25 +1240,44 @@ test("new vertex chooses a parent in its dialog and submits with Add vertex", as
   );
 });
 
-test("right menu uses an Options icon and aligned equal-sized control rows", async ({
+test("secondary actions use a dismissible disclosure and editing controls appear only while editing", async ({
   page,
 }) => {
   await page.goto("./");
-  const top = page.locator(".edit-toolbar > button");
-  const bottom = page.locator(".inspector-actions > button");
-  await expect(top).toHaveCount(3);
-  await expect(bottom).toHaveCount(3);
-  const options = page.getByRole("button", { name: "Options", exact: true });
-  await expect(options).toHaveText("");
-  await expect(options.locator("svg")).toHaveCount(1);
-  for (let index = 0; index < 3; index++) {
-    const upper = await top.nth(index).boundingBox();
-    const lower = await bottom.nth(index).boundingBox();
-    expect(upper!.x).toBe(lower!.x);
-    expect(upper!.width).toBe(lower!.width);
-    expect(upper!.height).toBe(lower!.height);
-  }
-  await options.click();
+  await expect(
+    page.getByRole("button", { name: "Vertex color", exact: true }),
+  ).toHaveCount(0);
+  await expect(
+    page.getByRole("button", { name: "New vertex", exact: true }),
+  ).toHaveCount(0);
+  const menu = page.getByLabel("Goal actions", { exact: true });
+  await menu.focus();
+  await page.keyboard.press("Enter");
+  await expect(
+    page.getByRole("button", { name: "Options", exact: true }),
+  ).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(
+    page.getByRole("button", { name: "Options", exact: true }),
+  ).toBeHidden();
+  await expect(menu).toBeFocused();
+  await menu.click();
+  await page.locator(".node-heading").click();
+  await expect(
+    page.getByRole("button", { name: "Options", exact: true }),
+  ).toBeHidden();
+  await page.getByRole("button", { name: "Edit graph", exact: true }).click();
+  await expect(
+    page.getByRole("button", { name: "New vertex", exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Vertex color", exact: true }),
+  ).toBeVisible();
+  await menu.click();
+  await expect(
+    page.getByRole("button", { name: "Delete hypertree", exact: true }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "Options", exact: true }).click();
   await expect(
     page.getByRole("switch", { name: "finished", exact: true }),
   ).toHaveAccessibleDescription(/notes and focus time/);
@@ -1274,7 +1287,7 @@ test("pedantic and finished show separate explanations only on hover or keyboard
   page,
 }) => {
   await page.goto("./");
-  await page.getByRole("button", { name: "Options", exact: true }).click();
+  await goalAction(page, "Options");
   const pedantic = page.getByRole("switch", { name: "pedantic", exact: true });
   const finished = page.getByRole("switch", { name: "finished", exact: true });
   await expect(page.locator("#pedantic-definition")).toBeHidden();
@@ -1361,6 +1374,8 @@ test("desktop uses selected YAML and Markdown storage rather than browser worksp
           if (command === "desktop_select")
             return { directory: args.directory, yaml: null, notes: {} };
           if (command === "desktop_save") {
+            if (localStorage.getItem("test.fail-save") === "yes")
+              throw new Error("Disk is full");
             if (args.directory !== "/tmp/hyperforest-desktop-test")
               throw new Error("desktop_save requires the selected directory");
             const loaded = {
@@ -1403,11 +1418,54 @@ test("desktop uses selected YAML and Markdown storage rather than browser worksp
   await page
     .getByRole("button", { name: "Choose directory", exact: true })
     .click();
+  const status = page.getByLabel("Autosaved", { exact: true });
+  await expect(status).toBeVisible();
+  await expect(page.locator(".desktop-storage")).toHaveCount(0);
   await expect(
-    page.getByText("Data directory: /tmp/hyperforest-desktop-test", {
-      exact: true,
-    }),
+    page.getByText("Saved in data directory", { exact: true }),
+  ).toHaveCount(0);
+  const tooltip = page.locator(".save-details-tooltip");
+  const panel = page.locator(".desktop-save-status .action-menu-items");
+  await page.getByRole("link", { name: "hyperforest home" }).hover();
+  await expect(tooltip).toBeHidden();
+  await expect(panel).toBeHidden();
+  await status.hover();
+  await expect(tooltip).toBeVisible();
+  await expect(tooltip).toContainText(
+    "Data directory: /tmp/hyperforest-desktop-test",
+  );
+  await expect(tooltip).toContainText("Last saved:");
+  await page.getByRole("link", { name: "hyperforest home" }).hover();
+  await expect(tooltip).toBeHidden();
+  await status.focus();
+  await expect(tooltip).toBeVisible();
+  await page.keyboard.press("Enter");
+  await expect(
+    panel.getByRole("button", { name: "Change directory", exact: true }),
   ).toBeVisible();
+  await expect(tooltip).toBeHidden();
+  await expect(
+    panel.getByRole("button", { name: "Zoom interface in", exact: true }),
+  ).toHaveCount(0);
+  await page.keyboard.press("Escape");
+  const bar = page.locator(".desktop-status-bar");
+  expect((await bar.boundingBox())!.height).toBeLessThanOrEqual(44);
+  await bar
+    .getByRole("button", { name: "Zoom interface in", exact: true })
+    .click();
+  await expect(panel).toBeHidden();
+  await bar
+    .getByRole("button", { name: "Reset interface zoom", exact: true })
+    .click();
+  await status.click();
+  await page.evaluate(() => localStorage.setItem("test.fail-save", "yes"));
+  await panel.getByRole("button", { name: "Back up now", exact: true }).click();
+  await expect(page.getByRole("alert")).toContainText("Disk is full");
+  await page.getByLabel("Needs attention", { exact: true }).click();
+  await page.evaluate(() => localStorage.removeItem("test.fail-save"));
+  await panel.getByRole("button", { name: "Back up now", exact: true }).click();
+  await expect(status).toBeVisible();
+  await expect(page.getByRole("alert")).toHaveCount(0);
   await expect(
     page.getByRole("button", { name: "Select Test project", exact: true }),
   ).toHaveCount(0);
@@ -1467,7 +1525,7 @@ test("desktop uses selected YAML and Markdown storage rather than browser worksp
   await page.evaluate(() =>
     (
       window as unknown as { testTrayAction: (action: string) => void }
-    ).testTrayAction("pause"),
+    ).testTrayAction("toggle-focus"),
   );
   await expect
     .poll(() =>
@@ -1479,7 +1537,7 @@ test("desktop uses selected YAML and Markdown storage rather than browser worksp
   await page.evaluate(() =>
     (
       window as unknown as { testTrayAction: (action: string) => void }
-    ).testTrayAction("resume"),
+    ).testTrayAction("toggle-focus"),
   );
   await expect
     .poll(() =>
@@ -1497,6 +1555,174 @@ test("desktop uses selected YAML and Markdown storage rather than browser worksp
     .poll(() => page.evaluate(() => localStorage.getItem("test.quit")))
     .toBe("yes");
 });
+
+test("Space toggles focus without repeating or hijacking controls and note typing", async ({
+  page,
+}) => {
+  await page.goto("./");
+  await focusVertex(page, "Read & wonder");
+  const screen = page.getByRole("dialog", { name: "Focus session" });
+  await expect(screen).toBeFocused();
+  await page.keyboard.press("Space");
+  await expect(screen).toHaveAttribute("data-running", "false");
+  await expect(screen).toBeVisible();
+  await page.keyboard.press("Space");
+  await expect(screen).toHaveAttribute("data-running", "true");
+  await page.keyboard.down("Space");
+  await expect(screen).toHaveAttribute("data-running", "false");
+  await page.keyboard.down("Space");
+  await page.keyboard.up("Space");
+  await expect(screen).toHaveAttribute("data-running", "false");
+  await page.keyboard.press("Control+Space");
+  await expect(screen).toHaveAttribute("data-running", "false");
+  const resume = page.getByRole("button", { name: "Resume", exact: true });
+  await resume.focus();
+  await page.keyboard.press("Space");
+  await expect(screen).toHaveAttribute("data-running", "true");
+  const beforeMinimize = await page.evaluate(() =>
+    localStorage.getItem("hyperforest.workspace.v1"),
+  );
+  await page.getByRole("button", { name: "Minimize", exact: true }).focus();
+  await page.keyboard.press("Space");
+  await expect(page.locator(".focus-dock")).toHaveAttribute(
+    "data-running",
+    "true",
+  );
+  expect(
+    await page.evaluate(() => localStorage.getItem("hyperforest.workspace.v1")),
+  ).toBe(beforeMinimize);
+  await page.getByRole("button", { name: "Edit goal", exact: true }).click();
+  const notes = page.getByRole("textbox", { name: "Markdown notes" });
+  await notes.fill("A note");
+  await notes.press("Space");
+  await expect(notes).toHaveValue("A note ");
+  expect(
+    await page.evaluate(() => localStorage.getItem("hyperforest.workspace.v1")),
+  ).toBe(beforeMinimize);
+  await page.getByRole("button", { name: "Close dialog", exact: true }).click();
+  await page.getByRole("button", { name: "Expand", exact: true }).click();
+  await expect(screen).toBeFocused();
+  await page.keyboard.press("Space");
+  await expect(screen).toHaveAttribute("data-running", "false");
+});
+
+for (const width of [1440, 800, 390]) {
+  test(`focus presentation preserves accounting and fits at ${width}px`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width, height: width === 390 ? 844 : 650 });
+    await page.goto("./");
+    expect(
+      await page.evaluate(
+        () => document.documentElement.scrollWidth <= innerWidth,
+      ),
+    ).toBe(true);
+    const brand = await page.locator(".brand").boundingBox();
+    const today = page.locator(".brand-today").getByTestId("today-time");
+    const todayBox = await today.boundingBox();
+    expect(brand!.x + brand!.width).toBeLessThan(todayBox!.x);
+    expect(
+      Math.abs(
+        brand!.y + brand!.height / 2 - todayBox!.y - todayBox!.height / 2,
+      ),
+    ).toBeLessThan(2);
+    await expect(today.locator(".today-counter")).toHaveCSS(
+      "font-size",
+      "24px",
+    );
+    await expect(today).toHaveText(/Today\s*0h 0m/);
+    const actions = page.locator(".selection-actions");
+    const controls = actions.locator(
+      ":scope > button, :scope > details > summary",
+    );
+    const boxes = await controls.evaluateAll((elements) =>
+      elements.map((element) => {
+        const { x, y, width, height } = element.getBoundingClientRect();
+        return { x, y, width, height };
+      }),
+    );
+    for (const [index, box] of boxes.entries()) {
+      expect(box.x).toBeGreaterThanOrEqual(0);
+      expect(box.x + box.width).toBeLessThanOrEqual(width);
+      for (const other of boxes.slice(index + 1)) {
+        expect(
+          box.x + box.width <= other.x + 1 ||
+            other.x + other.width <= box.x + 1 ||
+            box.y + box.height <= other.y + 1 ||
+            other.y + other.height <= box.y + 1,
+        ).toBe(true);
+      }
+    }
+    const now = new Date();
+    await page.clock.install({ time: now });
+    await page.clock.pauseAt(now);
+    await focusVertex(page, "Read & wonder");
+    await page.clock.runFor(2000);
+    const timer = page.getByTestId("focus-timer");
+    const position = await timer.boundingBox();
+    await page.getByRole("button", { name: "Pause", exact: true }).click();
+    await expect(
+      page.getByRole("dialog", { name: "Focus session" }),
+    ).toBeVisible();
+    await expect(page.locator(".focus-status")).toHaveText("Paused");
+    expect(await timer.boundingBox()).toEqual(position);
+    await page.clock.runFor(10000);
+    await expect(timer).toHaveText("00:00:02");
+    const paused = await page.evaluate(() =>
+      localStorage.getItem("hyperforest.workspace.v1"),
+    );
+    await page.getByRole("button", { name: "Minimize", exact: true }).click();
+    await expect(
+      page.getByRole("region", { name: "Focus timer" }),
+    ).toContainText("Paused");
+    expect(
+      await page.evaluate(() =>
+        localStorage.getItem("hyperforest.workspace.v1"),
+      ),
+    ).toBe(paused);
+    await page.getByRole("button", { name: "Resume", exact: true }).click();
+    await expect(page.locator(".focus-dock")).toHaveAttribute(
+      "data-running",
+      "true",
+    );
+    await expect(
+      page.getByRole("dialog", { name: "Focus session" }),
+    ).toHaveCount(0);
+    await page.clock.runFor(3000);
+    await expect(page.locator(".focus-dock")).toContainText("00:00:05");
+    const running = await page.evaluate(() =>
+      localStorage.getItem("hyperforest.workspace.v1"),
+    );
+    await page.getByRole("button", { name: "Expand", exact: true }).click();
+    await expect(timer).toHaveText("00:00:05");
+    expect(await timer.boundingBox()).toEqual(position);
+    expect(
+      await page.evaluate(() =>
+        localStorage.getItem("hyperforest.workspace.v1"),
+      ),
+    ).toBe(running);
+    await page.keyboard.press("Escape");
+    await expect(page.locator(".focus-dock")).toHaveAttribute(
+      "data-running",
+      "true",
+    );
+    expect(
+      await page.evaluate(() =>
+        localStorage.getItem("hyperforest.workspace.v1"),
+      ),
+    ).toBe(running);
+    await page.getByLabel("Session actions", { exact: true }).click();
+    await page
+      .getByRole("button", { name: "Save & finish", exact: true })
+      .click();
+    await expect(page.locator(".focus-dock")).toHaveCount(0);
+    const state = await page.evaluate(() =>
+      JSON.parse(localStorage.getItem("hyperforest.workspace.v1")!),
+    );
+    expect(state.sessions[0].durationMs).toBe(5000);
+    expect(state.focus).toBeNull();
+  });
+}
 
 test("dense graph navigation restores labels and connections after the gesture", async ({
   page,

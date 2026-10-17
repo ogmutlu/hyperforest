@@ -84,11 +84,27 @@ snapshot is published. Conflicts and disk failures are surfaced to the interface
 ## Rendering
 
 - `App.tsx` coordinates selection, dialogs, and commands.
+- `DesktopSaveStatus.tsx` supplies Autosaved in the narrow desktop status bar.
+  Its tooltip exposes the native directory only on hover/focus; its disclosure
+  holds storage controls. Interface zoom stays beside Autosaved in the bar.
+  Save timestamps are published with successful
+  native writes, never before an operation succeeds. Today remains a separate
+  workspace-wide counter beside the brand, formatted in hours and minutes.
+- `FocusSession.tsx` presents the expanded timer or compact dock. Timer size is
+  React state in `App.tsx`, independent of Rust's running/paused session state.
+  Pause/resume/save/discard issue domain commands; minimize/expand never do.
+- `ActionMenu.tsx` provides button disclosures with outside-click and Escape
+  dismissal. Secondary actions stay accessible without crowding the toolbar.
 - `Graph.tsx` owns camera, pointer capture, drag previews, and edge hit testing.
 - `GraphVertex.tsx` and `GraphEdge.tsx` are memoized SVG components.
 - `useFrameState.ts` coalesces pointer samples into one update per animation frame.
   Its ref retains the final sample even if pointer-up precedes the next frame.
 - `Clock.tsx` confines clock subscriptions to the text displaying time.
+- `tray.ts` serializes native menu actions and status updates. The native
+  `src-tauri/src/tray.rs` renders activity badges and menu labels; it owns no
+  accounting rules. Pause, resume, and save still use the same domain commands.
+  Space in `FocusSession.tsx` invokes pause/resume only for a noninteractive focus
+  surface, ignoring repeats, modifiers, and text entry.
 - `presentation.ts` formats durations and filters the history by local dates/text.
 
 The graph does not rerender on a global 250-ms timer. Parent lookups use an indexed
@@ -97,8 +113,10 @@ unchanged content. Unselected nodes and edges no longer require Gaussian blur
 filters. In graphs above 150 visible vertices, navigation temporarily hides
 connections, labels (except the selection), and decoration, restoring them after
 the gesture. This avoids WebKit repainting hundreds of text/curve elements on
-every camera sample. Live focus is displayed in its own full-screen view; graph totals refresh
-on state changes, including pause/save. Today and the focus timer update locally.
+every camera sample. Live focus appears in its own large view or compact dock;
+graph totals refresh on state changes, including pause/save. Today and the focus
+timer update locally. Pausing keeps the timer's size and position. The global
+Today counter belongs to the header; goal totals belong to the selection.
 
 ## Persistence and trust
 

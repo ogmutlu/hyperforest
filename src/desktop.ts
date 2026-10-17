@@ -43,6 +43,8 @@ export class DesktopWorkspace extends Workspace {
   readonly directory: string;
   backupError: string | null = null;
   timerError: string | null = null;
+  private lastSavedAt: number | null = null;
+  getLastSavedAt = (): number | null => this.lastSavedAt;
   private queue: Promise<void> = Promise.resolve();
   constructor(loaded: DiskWorkspace) {
     const storage = new MemoryStorage();
@@ -62,8 +64,12 @@ export class DesktopWorkspace extends Workspace {
         request: diskPayload(state, Date.now()),
       }),
     );
-    super.replace(JSON.stringify(diskState(loaded)));
+    const raw = JSON.stringify(diskState(loaded));
     this.backupError = loaded.backup_error ?? null;
+    // Publish save details with the snapshot, so status subscribers see the
+    // completed disk write rather than an optimistic timestamp.
+    this.lastSavedAt = Date.now();
+    super.replace(raw);
   }
   override commit(action: Action, now: number): Promise<void> {
     return this.enqueue(() =>

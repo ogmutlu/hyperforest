@@ -1,64 +1,15 @@
 #[cfg(feature = "benchmark")]
 mod benchmark;
 mod store;
+mod tray;
 use std::{
     path::{Path, PathBuf},
     sync::Mutex,
 };
 use store::{Loaded, Save, Store};
-use tauri::{
-    menu::{Menu, MenuItem},
-    tray::TrayIconBuilder,
-    Emitter, Manager, State,
-};
+use tauri::{Manager, State};
+use tray::{desktop_tray_state, show_window};
 
-struct TrayControls {
-    focus_name: MenuItem<tauri::Wry>,
-    timer: MenuItem<tauri::Wry>,
-    pause: MenuItem<tauri::Wry>,
-    resume: MenuItem<tauri::Wry>,
-    quit: MenuItem<tauri::Wry>,
-}
-fn show_window(app: &tauri::AppHandle) {
-    if let Some(window) = app.get_webview_window("main") {
-        let _ = window.show();
-        let _ = window.unminimize();
-        let _ = window.set_focus();
-    }
-}
-#[tauri::command]
-async fn desktop_tray_state(
-    focus_name: String,
-    timer: String,
-    running: bool,
-    paused: bool,
-    state: State<'_, TrayControls>,
-) -> Result<(), String> {
-    state
-        .focus_name
-        .set_text(focus_name)
-        .map_err(|error| error.to_string())?;
-    state
-        .timer
-        .set_text(if paused {
-            format!("{timer} · Paused")
-        } else {
-            timer
-        })
-        .map_err(|error| error.to_string())?;
-    state
-        .pause
-        .set_enabled(running)
-        .map_err(|error| error.to_string())?;
-    state
-        .resume
-        .set_enabled(paused)
-        .map_err(|error| error.to_string())?;
-    state
-        .quit
-        .set_enabled(true)
-        .map_err(|error| error.to_string())
-}
 #[tauri::command]
 async fn desktop_show_window(app: tauri::AppHandle) {
     show_window(&app);
@@ -226,41 +177,7 @@ fn main() {
                 store: Mutex::new(None),
                 config: directory.join("data-directory"),
             });
-            let open = MenuItem::with_id(app, "open", "Open app", true, None::<&str>)?;
-            let focus_name =
-                MenuItem::with_id(app, "focus-name", "No active focus", false, None::<&str>)?;
-            let timer = MenuItem::with_id(app, "timer", "00:00:00", false, None::<&str>)?;
-            let pause = MenuItem::with_id(app, "pause", "Pause focus", false, None::<&str>)?;
-            let resume = MenuItem::with_id(app, "resume", "Resume focus", false, None::<&str>)?;
-            let quit = MenuItem::with_id(app, "quit", "Quit", false, None::<&str>)?;
-            let menu =
-                Menu::with_items(app, &[&focus_name, &timer, &open, &pause, &resume, &quit])?;
-            TrayIconBuilder::with_id("focus")
-                .icon(
-                    app.default_window_icon()
-                        .ok_or("Application icon is missing")?
-                        .clone(),
-                )
-                .tooltip("hyperforest")
-                .menu(&menu)
-                .on_menu_event(|app, event| match event.id.as_ref() {
-                    "open" => show_window(app),
-                    "pause" | "resume" | "quit" => {
-                        let sent = app.emit("hyperforest-tray-action", event.id.as_ref());
-                        if sent.is_err() {
-                            show_window(app);
-                        }
-                    }
-                    _ => {}
-                })
-                .build(app)?;
-            app.manage(TrayControls {
-                focus_name,
-                timer,
-                pause,
-                resume,
-                quit,
-            });
+            tray::install(app)?;
             Ok(())
         })
         .on_window_event(|window, event| {

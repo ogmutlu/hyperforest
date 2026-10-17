@@ -39,8 +39,12 @@ configured (`npm run desktop:build -- --bundles appimage`).
 
 ## Select the data directory
 
-On first launch choose a directory. **Change directory** is always available
-above the interface. An existing `workspace.yaml` opens that workspace. An empty
+On first launch choose a directory. Once open, a narrow desktop status bar shows
+**Autosaved** and interface zoom:
+hover or keyboard-focus it to see the directory and last successful save time.
+Click **Autosaved** for **Change directory** and **Back up now**.
+The directory stays hidden during normal use; errors remain visible.
+An existing `workspace.yaml` opens that workspace. An empty
 directory receives the current workspace when changing directories; the old
 directory stays intact. Browser data is separate: use **Export** on the website,
 then **Import** in the desktop app to transfer a current YAML/Markdown ZIP.
@@ -106,11 +110,16 @@ Use the − / percentage / + controls above the app to zoom the entire interface
 Keyboard shortcuts are Ctrl+plus, Ctrl+minus, and Ctrl+0 to reset. Ctrl+scroll on
 menus also changes interface zoom; Ctrl+scroll over the graph changes its camera.
 
-The tray menu shows the current focus vertex name and elapsed timer, updated every
-second. Pausing freezes the timer and marks it **Paused**. It also offers
-**Open app**, **Pause focus**, **Resume focus**, and **Quit**.
-Pause/Resume reflect the same saved session as the window. Closing the window
-hides it while focus and autosave continue; use **Open app** to return. **Quit**
+The tray icon adds a green play badge while focusing and an amber pause badge
+while paused. With no session it shows the ordinary logo. The menu groups the
+goal and elapsed time above **Open hyperforest**, a single **Pause session** /
+**Resume session** control, and **Save & finish**. When idle, **Start a session…**
+opens the app to choose a goal. The icon changes only on activity changes; the
+elapsed time updates every second. Space pauses/resumes in the large focus view
+without minimizing it; typing and focused buttons keep their normal behavior.
+
+Tray controls reflect the same saved session as the window. Closing the window
+hides it while focus and autosave continue; use **Open hyperforest** to return. **Quit hyperforest**
 pauses and saves before exiting. If a save fails, the window opens with the error
 instead of quitting. Your desktop panel must support tray/AppIndicator icons.
 

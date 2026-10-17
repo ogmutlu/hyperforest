@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState, useRef } from "react";
 import { connectTray } from "./tray";
 import { App } from "./App";
+import { DesktopSaveStatus } from "./DesktopSaveStatus";
 import { chooseDesktop, loadDesktop } from "./desktop";
 import type { DesktopWorkspace } from "./desktop";
 
@@ -9,7 +10,6 @@ export function DesktopApp() {
   const [ready, setReady] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
-  const [saved, setSaved] = useState("");
   const [interfaceZoom, setInterfaceZoom] = useState(1);
   const requestedZoom = useRef(1);
   const zoomQueue = useRef(Promise.resolve());
@@ -65,7 +65,6 @@ export function DesktopApp() {
     if (!workspace) return;
     try {
       await workspace.flush();
-      setSaved(new Date().toLocaleTimeString());
       setError(workspace.timerError ?? workspace.backupError ?? "");
     } catch (reason: unknown) {
       setError(String(reason));
@@ -114,71 +113,66 @@ export function DesktopApp() {
       setBusy(false);
     }
   };
+  const zoomControls = (
+    <div className="interface-zoom" aria-label="Interface zoom">
+      <button
+        className="quiet-button"
+        aria-label="Zoom interface out"
+        title="Ctrl+-"
+        disabled={interfaceZoom <= 0.5}
+        onClick={() => zoom(requestedZoom.current - 0.1)}
+      >
+        −
+      </button>
+      <button
+        className="quiet-button"
+        aria-label="Reset interface zoom"
+        title="Ctrl+0"
+        onClick={() => zoom(1)}
+      >
+        {Math.round(interfaceZoom * 100)}%
+      </button>
+      <button
+        className="quiet-button"
+        aria-label="Zoom interface in"
+        title="Ctrl++"
+        disabled={interfaceZoom >= 2}
+        onClick={() => zoom(requestedZoom.current + 0.1)}
+      >
+        +
+      </button>
+    </div>
+  );
   return (
     <>
-      <div className="desktop-storage">
-        <span>
-          {workspace
-            ? `Data directory: ${workspace.directory}`
-            : "Choose where hyperforest saves its data"}
-        </span>
-        {saved && <small>Autosaved {saved}</small>}
-        <div className="interface-zoom" aria-label="Interface zoom">
-          <button
-            className="quiet-button"
-            aria-label="Zoom interface out"
-            title="Ctrl+-"
-            disabled={interfaceZoom <= 0.5}
-            onClick={() => zoom(requestedZoom.current - 0.1)}
-          >
-            −
-          </button>
-          <button
-            className="quiet-button"
-            aria-label="Reset interface zoom"
-            title="Ctrl+0"
-            onClick={() => zoom(1)}
-          >
-            {Math.round(interfaceZoom * 100)}%
-          </button>
-          <button
-            className="quiet-button"
-            aria-label="Zoom interface in"
-            title="Ctrl++"
-            disabled={interfaceZoom >= 2}
-            onClick={() => zoom(requestedZoom.current + 0.1)}
-          >
-            +
-          </button>
-        </div>
-        <button
-          className="quiet-button"
-          disabled={busy || !ready}
-          onClick={() => {
-            void choose();
-          }}
-        >
-          {workspace ? "Change directory" : "Choose directory"}
-        </button>
-        {workspace && (
-          <button
-            className="quiet-button"
-            disabled={busy}
-            onClick={() => {
-              void flush();
+      {workspace && (
+        <div className="desktop-status-bar">
+          <DesktopSaveStatus
+            workspace={workspace}
+            busy={busy}
+            error={error}
+            onChoose={() => {
+              void choose();
             }}
-          >
-            Save now
-          </button>
-        )}
-      </div>
+            onBackup={() => {
+              setBusy(true);
+              void flush().finally(() => setBusy(false));
+            }}
+          />
+          {zoomControls}
+        </div>
+      )}
       {error && (
         <div className="desktop-error" role="alert">
           {error}
         </div>
       )}
       {workspace ? (
-        <App key={workspace.directory} workspace={workspace} />
+        <App
+          key={workspace.directory}
+          workspace={workspace}
+          showSaveStatus={false}
+        />
       ) : (
         <main className="empty-workspace">
           <h1>hyperforest</h1>
@@ -186,6 +180,16 @@ export function DesktopApp() {
             Select a directory for workspace.yaml, Markdown notes, and daily
             backups.
           </p>
+          <button
+            className="primary-button"
+            disabled={busy || !ready}
+            onClick={() => {
+              void choose();
+            }}
+          >
+            Choose directory
+          </button>
+          {zoomControls}
           {!ready && <p>Loading…</p>}
         </main>
       )}

@@ -118,11 +118,13 @@ it("does not change visible state when disk writes fail and serializes successfu
     notes: payload.notes,
   });
   const previous = workspace.getSnapshot();
+  expect(workspace.getLastSavedAt()).toBeNull();
   ipc.mockRejectedValueOnce("Disk is full");
   await expect(
     workspace.commit({ type: "create", id: "failed", title: "Failed" }, 3000),
   ).rejects.toBe("Disk is full");
   expect(workspace.getSnapshot()).toBe(previous);
+  expect(workspace.getLastSavedAt()).toBeNull();
   ipc.mockImplementation(
     async (
       _command: string,
@@ -141,6 +143,7 @@ it("does not change visible state when disk writes fail and serializes successfu
     if (command === "desktop_save")
       expect(args).toHaveProperty("directory", "/tmp/forest");
   }
+  expect(workspace.getLastSavedAt()).not.toBeNull();
   expect(workspace.getSnapshot().trees.map((tree) => tree.id)).toEqual([
     "root",
     "a",

@@ -9,10 +9,13 @@ export async function connectTray(
   report: (error: string) => void,
 ): Promise<() => void> {
   let quitting = false;
+  let connected = true;
+  let updates: Promise<void> = Promise.resolve();
+  let actions: Promise<void> = Promise.resolve();
   const sync = (): void => {
     const snapshot = workspace?.getSnapshot();
     const focus = snapshot?.focus;
-    void invoke("desktop_tray_state", {
+    const payload = {
       focusName: focus
         ? (snapshot?.nodes.find((vertex) => vertex.id === focus.nodeId)
             ?.title ?? focus.title)
@@ -20,36 +23,52 @@ export async function connectTray(
       timer: formatTime(focus ? focusElapsed(focus, Date.now()) : 0),
       running: !!focus && focus.runningSince !== null,
       paused: !!focus && focus.runningSince === null,
-    }).catch((reason: unknown) => report(String(reason)));
+    };
+    updates = updates
+      .then(async () => {
+        if (connected) await invoke("desktop_tray_state", payload);
+      })
+      .catch((reason: unknown) => report(String(reason)));
   };
   const unlisten = await listen<string>("hyperforest-tray-action", (event) => {
-    void (async () => {
-      if (quitting) return;
-      const focus = workspace?.getSnapshot().focus;
-      if (event.payload === "pause" && focus && focus.runningSince !== null)
-        await workspace!.commit({ type: "pause" }, Date.now());
-      if (event.payload === "resume" && focus && focus.runningSince === null)
-        await workspace!.commit(
-          { type: "start", id: focus.nodeId },
-          Date.now(),
-        );
-      if (event.payload === "quit") {
-        quitting = true;
-        if (focus && focus.runningSince !== null)
-          await workspace!.commit({ type: "pause" }, Date.now());
-        await workspace?.flush();
-        await invoke("desktop_quit");
-      }
-    })().catch((reason: unknown) => {
-      quitting = false;
-      report(String(reason));
-      void invoke("desktop_show_window").catch(() => {});
-    });
+    actions = actions
+      .then(async () => {
+        if (!connected || quitting) return;
+        const focus = workspace?.getSnapshot().focus;
+        if (event.payload === "toggle-focus") {
+          if (!focus) await invoke("desktop_show_window");
+          else
+            await workspace!.commit(
+              focus.runningSince === null
+                ? { type: "start", id: focus.nodeId }
+                : { type: "pause" },
+              Date.now(),
+            );
+        }
+        if (event.payload === "finish" && focus)
+          await workspace!.commit(
+            { type: "finish", id: crypto.randomUUID() },
+            Date.now(),
+          );
+        if (event.payload === "quit") {
+          quitting = true;
+          if (focus && focus.runningSince !== null)
+            await workspace!.commit({ type: "pause" }, Date.now());
+          await workspace?.flush();
+          await invoke("desktop_quit");
+        }
+      })
+      .catch((reason: unknown) => {
+        quitting = false;
+        report(String(reason));
+        void invoke("desktop_show_window").catch(() => {});
+      });
   });
   const unsubscribe = workspace?.subscribe(sync);
   const interval = setInterval(sync, 1000);
   sync();
   return () => {
+    connected = false;
     clearInterval(interval);
     unsubscribe?.();
     unlisten();

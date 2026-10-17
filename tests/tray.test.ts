@@ -92,7 +92,7 @@ it("tray shows the vertex name, ticks each second, freezes on pause and stops on
   }
 });
 
-it("tray pause/resume uses the shared saved focus and quit pauses and saves before exit", async () => {
+it("tray toggles and finishes the shared session and quit pauses and saves before exit", async () => {
   ipc.mockReset();
   const time = Date.now();
   let state: State = {
@@ -130,15 +130,30 @@ it("tray pause/resume uses the shared saved focus and quit pauses and saves befo
   const report = vi.fn();
   const disconnect = await connectTray(workspace, report);
   const action = listeners.get("hyperforest-tray-action")!;
-  action({ payload: "pause" });
+  action({ payload: "toggle-focus" });
   await vi.waitFor(() =>
     expect(workspace.getSnapshot().focus?.runningSince).toBeNull(),
   );
   expect(workspace.getSnapshot().focus!.elapsedMs).toBeGreaterThanOrEqual(4000);
-  action({ payload: "resume" });
+  action({ payload: "toggle-focus" });
   await vi.waitFor(() =>
     expect(workspace.getSnapshot().focus?.runningSince).not.toBeNull(),
   );
+  const saves = ipc.mock.calls.filter(
+    ([command]) => command === "desktop_save",
+  ).length;
+  action({ payload: "toggle-focus" });
+  action({ payload: "toggle-focus" });
+  await vi.waitFor(() =>
+    expect(
+      ipc.mock.calls.filter(([command]) => command === "desktop_save"),
+    ).toHaveLength(saves + 2),
+  );
+  expect(workspace.getSnapshot().focus?.runningSince).not.toBeNull();
+  action({ payload: "finish" });
+  await vi.waitFor(() => expect(workspace.getSnapshot().focus).toBeNull());
+  expect(workspace.getSnapshot().sessions).toHaveLength(1);
+  await workspace.commit({ type: "start", id: "root" }, Date.now());
   action({ payload: "quit" });
   await vi.waitFor(() =>
     expect(ipc.mock.calls.some(([command]) => command === "desktop_quit")).toBe(
@@ -179,6 +194,13 @@ it("a failed save prevents quit and reopens the window", async () => {
   });
   const report = vi.fn();
   const disconnect = await connectTray(workspace, report);
+  listeners.get("hyperforest-tray-action")!({ payload: "finish" });
+  await vi.waitFor(() =>
+    expect(report).toHaveBeenCalledWith("Error: Disk full"),
+  );
+  expect(workspace.getSnapshot().focus?.runningSince).not.toBeNull();
+  expect(workspace.getSnapshot().sessions).toHaveLength(0);
+  report.mockClear();
   listeners.get("hyperforest-tray-action")!({ payload: "quit" });
   await vi.waitFor(() =>
     expect(report).toHaveBeenCalledWith("Error: Disk full"),
@@ -191,4 +213,22 @@ it("a failed save prevents quit and reopens the window", async () => {
   ).toBe(true);
   expect(workspace.getSnapshot().focus?.runningSince).not.toBeNull();
   disconnect();
+});
+
+it("starting from an idle tray opens the app to choose a goal", async () => {
+  ipc.mockReset();
+  const report = vi.fn();
+  const disconnect = await connectTray(null, report);
+  try {
+    listeners.get("hyperforest-tray-action")!({ payload: "toggle-focus" });
+    await vi.waitFor(() =>
+      expect(ipc).toHaveBeenCalledWith("desktop_show_window"),
+    );
+    expect(ipc.mock.calls.some(([command]) => command === "desktop_save")).toBe(
+      false,
+    );
+    expect(report).not.toHaveBeenCalled();
+  } finally {
+    disconnect();
+  }
 });

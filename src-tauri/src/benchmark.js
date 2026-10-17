@@ -21,7 +21,7 @@
     button.click();
   };
   try {
-    await wait(() => document.querySelector('[data-testid="node-root"]') && document.querySelector(".desktop-storage small"));
+    await wait(() => document.querySelector('[data-testid="node-root"]') && document.querySelector('.desktop-save-status summary[aria-label="Autosaved"]'));
     const startupToSavedGraphMs = performance.now();
     const svg = document.querySelector(".graph-svg");
     const samples = async (count, zoom) => {
@@ -53,8 +53,32 @@
       await wait(() => !document.querySelector(".inline-rename"));
       editsMs.push(performance.now() - start);
     }
+    // Exercise the new keyboard behavior and the real native tray update path,
+    // outside the measured graph intervals. All data lives in this run's /tmp dir.
+    const trayState = async (running, paused) => {
+      await window.__TAURI_INTERNALS__.invoke("desktop_tray_state", {
+        focusName: "Benchmark edit 3",
+        timer: document.querySelector('[data-testid="focus-timer"]')?.textContent.trim() ?? "00:00:00",
+        running, paused,
+      });
+    };
+    click("Focus");
+    await wait(() => document.querySelector('.focus-screen[data-running="true"]') === document.activeElement);
+    await trayState(true, false);
+    const space = () => document.querySelector(".focus-screen").dispatchEvent(new KeyboardEvent("keydown", { key: " ", code: "Space", bubbles: true, cancelable: true }));
+    space();
+    await wait(() => document.querySelector('.focus-screen[data-running="false"]'));
+    await trayState(false, true);
+    space();
+    await wait(() => document.querySelector('.focus-screen[data-running="true"]'));
+    await trayState(true, false);
+    click("Save & finish");
+    await wait(() => !document.querySelector(".focus-screen"));
+    await trayState(false, false);
+    if (document.querySelector(".desktop-error")) throw new Error(document.querySelector(".desktop-error").textContent);
     await send({ engine: navigator.userAgent, vertices: 500, devicePixelRatio,
       startupToSavedGraphMs, idleFrames, zoomFrames, editAndSaveMs: editsMs,
+      focusKeyboardAndTrayChecks: "passed: running, paused, resumed, saved; native tray updates succeeded",
       note: "Visible production Tauri/WebKit window. Includes real Rust WASM, IPC, reports, disk writes, and daily backup updates. Frame intervals include display pacing." });
   } catch (error) { await send({ error: String(error) }); }
 })();

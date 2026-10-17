@@ -1,4 +1,6 @@
-import { FocusTimer, TodayCounter } from "./Clock";
+import { TodayCounter } from "./Clock";
+import { FocusSession } from "./FocusSession";
+import { ActionMenu } from "./ActionMenu";
 import {
   createContext,
   useCallback,
@@ -342,7 +344,13 @@ function EditDialog({
     </Dialog>
   );
 }
-export function App({ workspace }: { workspace: Workspace }) {
+export function App({
+  workspace,
+  showSaveStatus = true,
+}: {
+  workspace: Workspace;
+  showSaveStatus?: boolean;
+}) {
   const state = useSyncExternalStore(
     workspace.subscribe,
     workspace.getSnapshot,
@@ -355,6 +363,7 @@ export function App({ workspace }: { workspace: Workspace }) {
   );
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const [focusMinimized, setFocusMinimized] = useState(false);
   const [dialog, setDialog] = useState<
     | "tree"
     | "child"
@@ -384,10 +393,7 @@ export function App({ workspace }: { workspace: Workspace }) {
   const [manualSeconds, setManualSeconds] = useState("0");
   const [deletingSession, setDeletingSession] = useState<string | null>(null);
   const [customColor, setCustomColor] = useState("#dfc491");
-  const [origin, setOrigin] = useState({ x: 0, y: 0 });
-  const [expanded, setExpanded] = useState(false);
   const importInput = useRef<HTMLInputElement>(null);
-  const focusDialog = useRef<HTMLDialogElement>(null);
   const tree = state.trees.find((item) => item.id === treeId) ?? state.trees[0];
   const node =
     state.nodes.find(
@@ -454,28 +460,23 @@ export function App({ workspace }: { workspace: Workspace }) {
   }, [workspace]);
   const running = focus !== null && focus.runningSince !== null;
   useEffect(() => {
-    if (running) focusDialog.current?.showModal();
-    else focusDialog.current?.close();
-    const frame = requestAnimationFrame(() => setExpanded(running));
-    return () => cancelAnimationFrame(frame);
-  }, [running, focusNode, focus]);
-  useEffect(() => {
-    if (!running) {
+    if (!focus) {
       document.title = "hyperforest — a little structure";
       return;
     }
     const updateTitle = (): void => {
-      document.title = formatTime(focusElapsed(focus, Date.now()));
+      document.title = `${running ? "" : "Paused · "}${formatTime(focusElapsed(focus, Date.now()))} — hyperforest`;
     };
     updateTitle();
+    if (!running) return;
     const timer = setInterval(updateTitle, 1000);
     return () => clearInterval(timer);
   }, [running, focus]);
   const start = useCallback(
-    async (id: string, point: { x: number; y: number }): Promise<void> => {
-      setOrigin(point);
+    async (id: string): Promise<void> => {
       if (await run({ type: "start", id })) {
         setSelected(id);
+        setFocusMinimized(false);
       }
     },
     [run],
@@ -532,21 +533,33 @@ export function App({ workspace }: { workspace: Workspace }) {
     <ErrorContext.Provider value={error}>
       <main>
         <header className="topbar">
-          <a className="brand" href="./" aria-label="hyperforest home">
-            <span className="brand-icon">
-              <Icon name="tree" size={21} />
-            </span>
-            hyperforest
-          </a>
+          <div className="brand-today">
+            <a className="brand" href="./" aria-label="hyperforest home">
+              <span className="brand-icon">
+                <Icon name="tree" size={21} />
+              </span>
+              hyperforest
+            </a>
+            <button
+              className="header-today"
+              data-testid="today-time"
+              aria-label="Today's focus"
+              title="View today's sessions"
+              onClick={() => {
+                const day = localDateTime(Date.now()).slice(0, 10);
+                setHistoryFrom(day);
+                setHistoryTo(day);
+                setHistorySubject("");
+                setDialog("history");
+              }}
+            >
+              <span className="today-label">Today</span>{" "}
+              <span className="today-counter">
+                <TodayCounter state={state} />
+              </span>
+            </button>
+          </div>
           <div className="top-actions">
-            {state.trees.length > 1 && (
-              <button
-                className="quiet-button"
-                onClick={() => setDialog("tabs")}
-              >
-                Rearrange tabs
-              </button>
-            )}
             <button
               className="quiet-button"
               disabled={busy}
@@ -558,73 +571,81 @@ export function App({ workspace }: { workspace: Workspace }) {
             >
               <Icon name="plus" size={16} /> New hypertree
             </button>
-            <button
-              className="quiet-button"
-              onClick={() => setDialog("history")}
-            >
-              Session history
-            </button>
-            <div className="saved-controls">
-              <span className="saved-state" role="status" tabIndex={0}>
-                <i />{" "}
-                {workspace instanceof DesktopWorkspace
-                  ? "Saved in data directory"
-                  : "Saved on this device"}
+
+            {showSaveStatus && (
+              <span className="saved-state" role="status">
+                <i /> Saved on this device
               </span>
-              <div className="saved-menu">
+            )}
+
+            <ActionMenu label="Workspace actions">
+              <button
+                className="quiet-button"
+                onClick={() => setDialog("history")}
+              >
+                Session history
+              </button>
+              {state.trees.length > 1 && (
                 <button
-                  className="quiet-button danger"
-                  disabled={busy}
-                  onClick={() => setDialog("clear")}
+                  className="quiet-button"
+                  onClick={() => setDialog("tabs")}
                 >
-                  <Icon name="trash" /> Clear local data
+                  Rearrange tabs
                 </button>
-              </div>
-            </div>
-            <button
-              className="quiet-button"
-              onClick={() => {
-                setBusy(true);
-                const snapshot = workspace.getSnapshot();
-                const archive = exportArchive(snapshot, Date.now());
-                void exportBackup("hyperforest-export.zip", archive)
-                  .then(() => {
-                    setError("");
-                  })
-                  .catch((exception: unknown) => {
-                    if (!(
-                      exception instanceof DOMException &&
-                      exception.name === "AbortError"
-                    ))
-                      setError(
-                        exception instanceof Error
-                          ? exception.message
-                          : "Could not export the backup.",
-                      );
-                  })
-                  .finally(() => setBusy(false));
-              }}
-            >
-              <Icon name="download" /> Export
-            </button>
-            <button
-              className="quiet-button"
-              disabled={busy}
-              onClick={() => importInput.current?.click()}
-            >
-              <Icon name="upload" /> Import
-            </button>
-            <input
-              ref={importInput}
-              hidden
-              type="file"
-              accept="application/zip,.zip"
-              aria-label="Import backup"
-              onChange={(event) => {
-                void importFile(event.target.files?.[0]);
-                event.target.value = "";
-              }}
-            />
+              )}
+              <button
+                className="quiet-button"
+                onClick={() => {
+                  setBusy(true);
+                  const snapshot = workspace.getSnapshot();
+                  const archive = exportArchive(snapshot, Date.now());
+                  void exportBackup("hyperforest-export.zip", archive)
+                    .then(() => {
+                      setError("");
+                    })
+                    .catch((exception: unknown) => {
+                      if (!(
+                        exception instanceof DOMException &&
+                        exception.name === "AbortError"
+                      ))
+                        setError(
+                          exception instanceof Error
+                            ? exception.message
+                            : "Could not export the backup.",
+                        );
+                    })
+                    .finally(() => setBusy(false));
+                }}
+              >
+                <Icon name="download" /> Export
+              </button>
+              <button
+                className="quiet-button"
+                disabled={busy}
+                onClick={() => importInput.current?.click()}
+              >
+                <Icon name="upload" /> Import
+              </button>
+              <input
+                ref={importInput}
+                hidden
+                type="file"
+                accept="application/zip,.zip"
+                aria-label="Import backup"
+                onChange={(event) => {
+                  void importFile(event.target.files?.[0]);
+                  event.target.value = "";
+                }}
+              />
+
+              <button
+                className="quiet-button danger"
+                disabled={busy}
+                onClick={() => setDialog("clear")}
+              >
+                <Icon name="trash" /> Clear local data
+              </button>
+            </ActionMenu>
           </div>
         </header>
 
@@ -661,124 +682,116 @@ export function App({ workspace }: { workspace: Workspace }) {
               style={{ "--node-color": color } as CSSProperties}
             >
               <div className="inspector-summary">
-                <NodeName
-                  key={node.id}
-                  node={node}
-                  editing={editing && node.finishedAt === undefined}
-                  busy={busy}
-                  run={run}
-                />
-                <div className="time-stat">
-                  <span>{shortTime(time.get(node.id) ?? 0)}</span>
-                  <div>
-                    TIME GIVEN
-                    {node.estimateMinutes > 0 && (
-                      <small>
-                        of {shortTime(node.estimateMinutes * 60000)}
-                      </small>
-                    )}
-                  </div>
-                </div>
-                <div className="focus-control">
-                  <div className="today-time" data-testid="today-time">
-                    <small>TODAY</small>
-                    <span className="today-counter">
-                      {<TodayCounter state={state} />}
+                <div className="selection-details">
+                  <NodeName
+                    key={node.id}
+                    node={node}
+                    editing={editing && node.finishedAt === undefined}
+                    busy={busy}
+                    run={run}
+                  />
+                  <div className="time-stat">
+                    <span>{shortTime(time.get(node.id) ?? 0)}</span>
+                    <span className="time-label">
+                      Total focused
+                      {node.estimateMinutes > 0 &&
+                        ` · estimated ${shortTime(node.estimateMinutes * 60000)}`}
                     </span>
                   </div>
+                </div>
+                <div className="selection-actions">
+                  <button
+                    className="quiet-button"
+                    aria-pressed={editing}
+                    onClick={() => setEditing((value) => !value)}
+                  >
+                    <Icon name={editing ? "check" : "pencil"} size={16} />{" "}
+                    {editing ? "Done editing" : "Edit graph"}
+                  </button>
+                  <button
+                    className="quiet-button"
+                    aria-label="Edit goal"
+                    disabled={busy}
+                    onClick={() => setDialog("edit")}
+                  >
+                    <Icon name="notes" size={16} /> Notes
+                  </button>
                   <button
                     className="primary-button start-button"
                     disabled={busy || node.finishedAt !== undefined}
-                    onClick={(event) => {
-                      const rect = event.currentTarget.getBoundingClientRect();
-                      void start(node.id, {
-                        x: rect.left - innerWidth / 2,
-                        y: rect.top - innerHeight / 2,
-                      });
+                    onClick={() => {
+                      void start(node.id);
                     }}
                   >
-                    <Icon name="play" size={16} />
-                    Focus
+                    <Icon name="play" size={16} /> Focus
+                  </button>
+                  <ActionMenu key={node.id} label="Goal actions">
+                    <button
+                      className="quiet-button"
+                      onClick={() => setDialog("options")}
+                    >
+                      <Icon name="settings" size={16} /> Options
+                    </button>
+                    {editing && (
+                      <>
+                        <button
+                          className="quiet-button"
+                          disabled={
+                            busy ||
+                            node.id === node.treeId ||
+                            node.finishedAt !== undefined
+                          }
+                          onClick={() => setDialog("complete")}
+                        >
+                          <Icon name="check" size={16} /> Finish goal
+                        </button>
+                        <button
+                          className="quiet-button danger"
+                          disabled={busy || node.finishedAt !== undefined}
+                          aria-label={
+                            node.id === node.treeId
+                              ? "Delete hypertree"
+                              : "Delete subtree"
+                          }
+                          onClick={() => setDialog("delete")}
+                        >
+                          <Icon name="trash" size={16} />{" "}
+                          {node.id === node.treeId
+                            ? "Delete hypertree"
+                            : "Delete subtree"}
+                        </button>
+                      </>
+                    )}
+                  </ActionMenu>
+                </div>
+              </div>
+              {editing && (
+                <div className="edit-toolbar" aria-label="Graph editing">
+                  <button
+                    className="quiet-button"
+                    disabled={busy || node.finishedAt !== undefined}
+                    onClick={() => {
+                      setNewName("");
+                      setLinkedTreeId("");
+                      setNewParent(node.id);
+                      setDialog("child");
+                    }}
+                  >
+                    <Icon name="plus" size={16} /> New vertex
+                  </button>
+                  <button
+                    className="quiet-button"
+                    aria-label="Vertex color"
+                    disabled={busy || node.finishedAt !== undefined}
+                    onClick={() => {
+                      setCustomColor(color);
+                      setDialog("color");
+                    }}
+                  >
+                    Vertex color
                   </button>
                 </div>
-                <button
-                  className="icon-button"
-                  aria-label="Edit goal"
-                  disabled={busy}
-                  onClick={() => setDialog("edit")}
-                >
-                  <Icon name="notes" />
-                </button>
-              </div>
-              <div className="inspector-actions">
-                <button
-                  className="quiet-button"
-                  aria-label="Vertex color"
-                  disabled={busy || !editing || node.finishedAt !== undefined}
-                  onClick={() => {
-                    setCustomColor(color);
-                    setDialog("color");
-                  }}
-                >
-                  Vertex color
-                </button>
-
-                <button
-                  className="quiet-button"
-                  disabled={
-                    busy ||
-                    !editing ||
-                    node.id === node.treeId ||
-                    node.finishedAt !== undefined
-                  }
-                  onClick={() => setDialog("complete")}
-                >
-                  <Icon name="check" size={16} />
-                  Finish goal
-                </button>
-                <button
-                  className="icon-button danger"
-                  aria-label={
-                    node.id === node.treeId
-                      ? "Delete hypertree"
-                      : "Delete subtree"
-                  }
-                  disabled={!editing || busy || node.finishedAt !== undefined}
-                  onClick={() => setDialog("delete")}
-                >
-                  <Icon name="trash" size={16} />
-                </button>
-              </div>
-              <div className="edit-toolbar">
-                <button
-                  className="quiet-button"
-                  aria-pressed={editing}
-                  onClick={() => setEditing((value) => !value)}
-                >
-                  <Icon name={editing ? "check" : "pencil"} size={16} />{" "}
-                  {editing ? "Done editing" : "Edit graph"}
-                </button>
-                <button
-                  className="quiet-button"
-                  disabled={!editing || busy || node.finishedAt !== undefined}
-                  onClick={() => {
-                    setNewName("");
-                    setLinkedTreeId("");
-                    setNewParent(node.id);
-                    setDialog("child");
-                  }}
-                >
-                  <Icon name="plus" size={16} /> New vertex
-                </button>
-                <button
-                  className="icon-button"
-                  aria-label="Options"
-                  title="Options"
-                  onClick={() => setDialog("options")}
-                >
-                  <Icon name="settings" size={16} />
-                </button>
-              </div>
+              )}
 
               <div className="child-list" aria-label="Child vertices">
                 {children.length ? (
@@ -838,111 +851,28 @@ export function App({ workspace }: { workspace: Workspace }) {
           </span>
         </footer>
         {focus && focusNode && (
-          <>
-            <dialog
-              ref={focusDialog}
-              onCancel={(event) => {
-                event.preventDefault();
-                void run({ type: "pause" });
-              }}
-              className={`focus-screen ${expanded ? "expanded" : ""}`}
-              aria-hidden={!running}
-              inert={!running}
-              role="dialog"
-              aria-modal="true"
-              aria-label="Focus session"
-              style={
-                {
-                  "--node-color": nodeColor(focusNode),
-                  "--origin-x": `${origin.x}px`,
-                  "--origin-y": `${origin.y}px`,
-                } as CSSProperties
-              }
-            >
-              <div className="focus-backdrop" />
-              <div className="focus-disc">
-                <div className="focus-inner-ring" />
-                <div className="focus-content">
-                  <div className="eyebrow">
-                    ONE THING. YOUR WHOLE ATTENTION.
-                  </div>
-                  <span className="focus-star">✦</span>
-                  <h2>{focusNode.title}</h2>
-                  <div className="focus-timer" data-testid="focus-timer">
-                    {<FocusTimer focus={focus} />}
-                  </div>
-                  <p>
-                    {focus.title === "General"
-                      ? "A little time for the bigger picture."
-                      : "There is nothing else you need to do right now."}
-                  </p>
-                  {error && (
-                    <p className="inline-error" role="alert">
-                      {error}
-                    </p>
-                  )}
-                  <div className="focus-actions">
-                    <button
-                      className="primary-button"
-                      disabled={busy}
-                      onClick={() => {
-                        void run({ type: "pause" });
-                      }}
-                    >
-                      <Icon name="pause" /> Pause & return
-                    </button>
-                    <button
-                      className="quiet-button"
-                      disabled={busy}
-                      onClick={() => {
-                        void run({ type: "finish", id: crypto.randomUUID() });
-                      }}
-                    >
-                      Save session <Icon name="check" />
-                    </button>
-                  </div>
-                  <span className="focus-lineage">{focus.group}</span>
-                </div>
-              </div>
-            </dialog>
-            {!running && (
-              <div className="paused-dock">
-                <span className="paused-dot" />
-                <div>
-                  <strong>{focusNode.title}</strong>
-                  <small>Paused · {<FocusTimer focus={focus} />}</small>
-                </div>
-                <button
-                  className="primary-button"
-                  disabled={busy}
-                  onClick={() => {
-                    void start(focus.nodeId, { x: 0, y: 0 });
-                  }}
-                >
-                  <Icon name="play" size={14} /> Resume
-                </button>
-                <button
-                  className="quiet-button"
-                  disabled={busy}
-                  onClick={() => {
-                    void run({ type: "finish", id: crypto.randomUUID() });
-                  }}
-                >
-                  Save
-                </button>
-                <button
-                  className="icon-button"
-                  aria-label="Discard paused session"
-                  onClick={() => {
-                    if (confirm("Discard this unsaved focus session?"))
-                      void run({ type: "discard" });
-                  }}
-                >
-                  <Icon name="close" size={16} />
-                </button>
-              </div>
-            )}
-          </>
+          <FocusSession
+            focus={focus}
+            title={focusNode.title}
+            color={nodeColor(focusNode)}
+            busy={busy}
+            error={error}
+            minimized={focusMinimized}
+            onMinimize={() => setFocusMinimized(true)}
+            onExpand={() => setFocusMinimized(false)}
+            onPause={() => {
+              void run({ type: "pause" });
+            }}
+            onResume={() => {
+              void run({ type: "start", id: focus.nodeId });
+            }}
+            onFinish={() => {
+              void run({ type: "finish", id: crypto.randomUUID() });
+            }}
+            onDiscard={() => {
+              void run({ type: "discard" });
+            }}
+          />
         )}
         {dialog === "options" && tree && (
           <Dialog close={() => setDialog(null)} label="Graph options">

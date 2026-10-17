@@ -33,14 +33,28 @@ then run `npm run desktop:dev`.
 ## Use
 
 Create a hypertree, enable **Edit graph**, and add goals. Drag vertices to place
-them and drag edge handles to reconnect them. **Options → pedantic** requires
+them and drag edge handles to reconnect them. **Goal actions (⋯) → Options → pedantic** requires
 connected graphs and connected color classes. It is off by default.
 
-Double-click a goal or select **Focus** to start its timer. **Pause & return**
-excludes the pause from focus time. Save the session to retain it. Internal goals
+Double-click a goal or select **Focus** to start its timer. **Pause** freezes the
+large timer in place; **Resume** continues it. Space toggles pause/resume in the
+large focus view; focused buttons keep their normal keyboard behavior.
+**Minimize** (or Escape) switches
+to a compact timer without changing whether it is running or paused; **Expand**
+opens the large timer again. **Save & finish** retains the session. Internal goals
 use the task name `General`; leaf goals use their own name. Finishing a goal
 preserves its subtree, notes, and history. Deletion removes vertices but retains
 session history.
+
+**Today**, beside the Hyperforest name, shows focus across the whole workspace
+in hours and minutes and opens history filtered to today. The selected goal's
+total appears beneath its name. On desktop, a narrow status bar holds
+**Autosaved** and interface zoom. Hover or focus **Autosaved** for the directory
+and last save time; click for storage controls. Editing
+controls appear only in **Edit graph** mode; finishing and deletion live in
+**Goal actions (⋯)**. **Workspace actions (⋯)** contains session history, export, import, tab
+ordering, and clear-data controls. The same controls serve web and desktop, with
+rows wrapping at narrower widths.
 
 The desktop app saves the current YAML workspace and real Markdown files in a
 directory you choose. **Export** creates a ZIP using the same format:

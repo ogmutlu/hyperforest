@@ -1,7 +1,7 @@
 /** Clock subscriptions live in the small components that display changing time. */
 import { useEffect, useState } from "react";
 import { focusElapsed, todayTime } from "./domainClient";
-import { formatHms, formatTime } from "./presentation";
+import { formatTime } from "./presentation";
 import type { Focus, State } from "./model";
 
 function useNow(interval: number | null, revision: object): number {
@@ -27,11 +27,12 @@ export function FocusTimer({ focus }: { focus: Focus }) {
 export function TodayCounter({ state }: { state: State }) {
   // Keep the day boundary fresh even when idle, without rerendering the graph.
   const now = useNow(state.focus?.runningSince != null ? 1000 : 10000, state);
+  const minutes = Math.floor(
+    todayTime(state, Math.max(now, state.focus?.runningSince ?? now)) / 60000,
+  );
   return (
     <>
-      {formatHms(
-        todayTime(state, Math.max(now, state.focus?.runningSince ?? now)),
-      )}
+      {Math.floor(minutes / 60)}h {minutes % 60}m
     </>
   );
 }
