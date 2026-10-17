@@ -1,3 +1,5 @@
+<img src="src-tauri/icons/icon.svg" alt="Hyperforest logo" width="96" height="96">
+
 # Hyperforest
 
 Hyperforest is a local-first graph of goals, Markdown notes, and focus sessions.
