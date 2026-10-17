@@ -693,6 +693,8 @@ test("drags persist and paused focus survives minimizing and reloading", async (
   await page.mouse.down();
   await page.mouse.move(box.x + box.width / 2 + 60, box.y + 70, { steps: 12 });
   await page.mouse.up();
+  // The preview can move before the locked workspace transaction has saved it.
+  await expect(page.locator(".graph")).not.toHaveClass(/is-dragging/);
   await expect(node).not.toHaveAttribute("transform", before ?? "");
   const moved = await node.getAttribute("transform");
   await page.reload();
