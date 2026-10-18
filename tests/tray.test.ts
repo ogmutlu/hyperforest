@@ -58,7 +58,9 @@ it("tray shows the vertex name, ticks each second, freezes on pause and stops on
               yaml: args.request!.yaml,
               notes: args.request!.notes,
             }
-          : undefined,
+          : command === "desktop_pending_sessions"
+            ? []
+            : undefined,
     );
     disconnect = await connectTray(workspace, vi.fn());
     expect(ipc).toHaveBeenLastCalledWith("desktop_tray_state", {
@@ -125,7 +127,9 @@ it("tray toggles and finishes the shared session and quit pauses and saves befor
             yaml: args.request!.yaml,
             notes: args.request!.notes,
           }
-        : undefined,
+        : command === "desktop_pending_sessions"
+          ? []
+          : undefined,
   );
   const report = vi.fn();
   const disconnect = await connectTray(workspace, report);
@@ -190,6 +194,7 @@ it("a failed save prevents quit and reopens the window", async () => {
     notes: payload.notes,
   });
   ipc.mockImplementation(async (command: string) => {
+    if (command === "desktop_pending_sessions") return [];
     if (command === "desktop_save") throw new Error("Disk full");
   });
   const report = vi.fn();

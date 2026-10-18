@@ -1,6 +1,7 @@
 mod archive;
 #[cfg(feature = "benchmark")]
 mod benchmark;
+mod hiper;
 mod store;
 mod tray;
 use archive::{desktop_export_archive, desktop_import_archive};
@@ -63,6 +64,18 @@ async fn desktop_save(
         return Err("The selected data directory changed. Reload before saving.".into());
     }
     store.save(request)
+}
+#[tauri::command]
+async fn desktop_pending_sessions(
+    directory: String,
+    state: State<'_, Desktop>,
+) -> Result<Vec<hiper::PendingSession>, String> {
+    let current = state.store.lock().map_err(|error| error.to_string())?;
+    let store = current.as_ref().ok_or("Choose a data directory first.")?;
+    if store.directory != Path::new(&directory) {
+        return Err("The selected data directory changed.".into());
+    }
+    store.pending_sessions()
 }
 #[tauri::command]
 async fn desktop_open_note(
@@ -208,6 +221,7 @@ fn main() {
             desktop_load,
             desktop_select,
             desktop_save,
+            desktop_pending_sessions,
             desktop_open_note,
             desktop_enable_backups,
             benchmark::desktop_benchmark_result
@@ -222,6 +236,7 @@ fn main() {
         desktop_load,
         desktop_select,
         desktop_save,
+        desktop_pending_sessions,
         desktop_open_note,
         desktop_enable_backups
     ]);

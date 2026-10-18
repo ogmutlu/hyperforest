@@ -147,6 +147,14 @@ pub enum Command {
         started_at: u64,
         duration_ms: u64,
     },
+    ImportSession {
+        id: Id,
+        title: Text,
+        started_at: u64,
+        ended_at: u64,
+        duration_ms: u64,
+        periods: Vec<Period>,
+    },
     DeleteSession {
         id: Id,
     },

@@ -125,3 +125,15 @@ npm run desktop:test
 Tests exercise the actual compiled Rust WASM, including in the Node test runner.
 Browser tests use Playwright Chromium; install it with `npx playwright install chromium`
 or set `CHROMIUM_PATH` to an existing Chromium executable.
+
+## Sessions from hiper
+
+In hiper, open **Settings** and save this app's data folder, or run
+`hiper set --hyperfokus-dir "/path/to/data"`. Saving a titled session in hiper's
+CLI or TUI delivers it through `hiper-inbox/*.json`. The desktop app imports it
+on its next autosave (within 30 seconds while open), or when the workspace opens.
+An exact, unique node title receives the session. Otherwise a node with that
+name under the `hiper` tree receives it; the tree and node are created as needed.
+The import preserves pause intervals and leaves any active desktop timer alone.
+Inbox files are removed only after the updated workspace is saved, and replaying
+an entry does not duplicate the session. Invalid files remain with a sync error.

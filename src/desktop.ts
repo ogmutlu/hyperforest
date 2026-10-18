@@ -8,6 +8,23 @@ import { structureYaml, simpleYaml } from "./export";
 import { STORAGE_KEY, Workspace } from "./storage";
 
 export const desktopEnabled = isTauri();
+const pendingSchema = z.array(
+  z.object({ filename: z.string(), contents: z.string() }),
+);
+const sessionSchema = z.object({
+  version: z.literal(1),
+  id: z.string().regex(/^[0-9a-f]{32}$/),
+  title: z.string(),
+  startedAt: z.number().int().nonnegative().safe(),
+  endedAt: z.number().int().nonnegative().safe(),
+  durationMs: z.number().int().positive().safe(),
+  periods: z.array(
+    z.object({
+      start: z.number().int().nonnegative().safe(),
+      end: z.number().int().nonnegative().safe(),
+    }),
+  ),
+});
 const loadedSchema = z.object({
   directory: z.string(),
   yaml: z.string().nullable(),
@@ -43,6 +60,7 @@ export class DesktopWorkspace extends Workspace {
   readonly directory: string;
   backupError: string | null = null;
   timerError: string | null = null;
+  syncError: string | null = null;
   private lastSavedAt: number | null = null;
   getLastSavedAt = (): number | null => this.lastSavedAt;
   private queue: Promise<void> = Promise.resolve();
@@ -58,10 +76,39 @@ export class DesktopWorkspace extends Workspace {
     return pending;
   }
   private async persist(state: State): Promise<void> {
+    const pending = pendingSchema.parse(
+      await invoke("desktop_pending_sessions", { directory: this.directory }),
+    );
+    const imported: string[] = [];
+    const errors: string[] = [];
+    for (const entry of pending) {
+      try {
+        const { version, ...session } = sessionSchema.parse(
+          JSON.parse(entry.contents) as unknown,
+        );
+        void version;
+        if (entry.filename !== `${session.id}.json`)
+          throw new Error("Session identity does not match its filename.");
+        state = apply(
+          state,
+          { ...session, id: `hiper-${session.id}`, type: "importSession" },
+          Date.now(),
+        );
+        imported.push(entry.filename);
+      } catch (reason: unknown) {
+        errors.push(`${entry.filename}: ${String(reason)}`);
+      }
+    }
+    this.syncError = errors.length
+      ? `hiper sessions pending: ${errors.join("; ")}`
+      : null;
     const loaded = loadedSchema.parse(
       await invoke("desktop_save", {
         directory: this.directory,
-        request: diskPayload(state, Date.now()),
+        request: {
+          ...diskPayload(state, Date.now()),
+          imported_sessions: imported,
+        },
       }),
     );
     const raw = JSON.stringify(diskState(loaded));

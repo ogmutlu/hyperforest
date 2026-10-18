@@ -238,3 +238,80 @@ fn all_parent_assignments_of_a_small_graph_are_classified_by_acyclicity() {
         }
     }
 }
+
+fn import_session(id_value: &str, title: &str) -> Command {
+    Command::ImportSession {
+        id: id(id_value),
+        title: id(title),
+        started_at: 2000,
+        ended_at: 8000,
+        duration_ms: 3000,
+        periods: vec![
+            Period {
+                start: 2000,
+                end: 3000,
+            },
+            Period {
+                start: 6000,
+                end: 8000,
+            },
+        ],
+    }
+}
+#[test]
+fn hiper_import_matches_titles_and_falls_back_to_a_reusable_hiper_tree() {
+    let original = add(&tree(), "Logic", "root");
+    let state = original.apply(import_session("s1", "Logic"), 9000).unwrap();
+    assert_eq!(state.snapshot().sessions[0].node_id, id("Logic"));
+    assert_eq!(state.snapshot().trees.len(), 1);
+    let state = state.apply(import_session("s2", "New task"), 9000).unwrap();
+    let fallback = state
+        .snapshot()
+        .trees
+        .iter()
+        .find(|t| t.title == id("hiper"))
+        .unwrap()
+        .id
+        .clone();
+    let node = state.snapshot().sessions[1].node_id.clone();
+    let state = state.apply(import_session("s3", "New task"), 9000).unwrap();
+    assert_eq!(state.snapshot().sessions[2].node_id, node);
+    assert_eq!(state.snapshot().trees.len(), 2);
+    let state = state
+        .apply(
+            Command::Add {
+                id: id("other-logic"),
+                tree_id: fallback.clone(),
+                parent_id: None,
+                title: id("Logic"),
+                linked_tree_id: None,
+            },
+            9000,
+        )
+        .unwrap();
+    let state = state.apply(import_session("s4", "Logic"), 9000).unwrap();
+    let imported = &state.snapshot().sessions[3];
+    assert_eq!(imported.tree_id, fallback);
+    assert!(state
+        .snapshot()
+        .nodes
+        .iter()
+        .any(|n| n.id == imported.node_id && n.parent_id.as_ref() == Some(&fallback)));
+    let node = imported.node_id.clone();
+    let state = state.apply(import_session("s5", "Logic"), 9000).unwrap();
+    assert_eq!(state.snapshot().sessions[4].node_id, node);
+    assert_eq!(
+        state.apply(import_session("s5", "Logic"), 9000).unwrap(),
+        state
+    );
+    assert_eq!(time::time_between(state.snapshot(), 3000, 6000).unwrap(), 0);
+    let mut invalid = import_session("bad", "Broken");
+    if let Command::ImportSession {
+        ref mut duration_ms,
+        ..
+    } = invalid
+    {
+        *duration_ms = 4000;
+    }
+    assert_eq!(state.apply(invalid, 9000), Err(Error::InvalidSession));
+}

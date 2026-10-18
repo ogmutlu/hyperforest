@@ -81,7 +81,12 @@ export function DesktopApp() {
     if (!workspace) return;
     try {
       await workspace.flush();
-      setError(workspace.timerError ?? workspace.backupError ?? "");
+      setError(
+        workspace.syncError ??
+          workspace.timerError ??
+          workspace.backupError ??
+          "",
+      );
     } catch (reason: unknown) {
       setError(String(reason));
     }

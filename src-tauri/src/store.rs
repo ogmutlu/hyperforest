@@ -24,6 +24,8 @@ pub struct Save {
     pub structure: String,
     pub simple: String,
     pub notes: BTreeMap<String, String>,
+    #[serde(default)]
+    pub imported_sessions: Vec<String>,
 }
 
 pub struct Store {
@@ -187,7 +189,11 @@ impl Store {
             .backup(&Local::now().format("%Y-%m-%d").to_string())
             .err();
         let mut loaded = self.loaded();
-        loaded.backup_error = backup_error;
+        let inbox_error = self.acknowledge_sessions(&request.imported_sessions).err();
+        loaded.backup_error = match (backup_error, inbox_error) {
+            (Some(a), Some(b)) => Some(format!("{a}; hiper import: {b}")),
+            (a, b) => a.or(b),
+        };
         Ok(loaded)
     }
 
@@ -267,6 +273,7 @@ mod tests {
     }
     fn save(text: &str) -> Save {
         Save {
+            imported_sessions: vec![],
             yaml: "version: 1\n".into(),
             structure: "hypertrees: []\n".into(),
             simple: "hypertrees: []\n".into(),
@@ -334,6 +341,35 @@ mod tests {
             fs::read_to_string(path.join("simple.yaml")).unwrap(),
             "readable: refreshed\n"
         );
+        drop(store);
+        fs::remove_dir_all(path).unwrap();
+    }
+    #[test]
+    fn hiper_inbox_is_acknowledged_only_after_a_successful_workspace_save() {
+        let path = folder();
+        let mut store = Store::open(path.clone()).unwrap();
+        store.save(save("notes")).unwrap();
+        fs::create_dir(path.join("hiper-inbox")).unwrap();
+        let name = format!("{}.json", "a".repeat(32));
+        let pending = path.join("hiper-inbox").join(&name);
+        atomic_write(&pending, b"session payload").unwrap();
+        atomic_write(&path.join("hiper-inbox/.partial.tmp"), b"incomplete").unwrap();
+        assert_eq!(store.pending_sessions().unwrap().len(), 1);
+        assert!(store
+            .acknowledge_sessions(&["../workspace.yaml".into()])
+            .is_err());
+        fs::write(path.join("workspace.yaml"), "external edit").unwrap();
+        let mut request = save("notes");
+        request.imported_sessions.push(name.clone());
+        assert!(store.save(request).is_err());
+        assert!(pending.exists());
+        drop(store);
+        let mut store = Store::open(path.clone()).unwrap();
+        let mut request = save("notes");
+        request.imported_sessions.push(name);
+        store.save(request).unwrap();
+        assert!(!pending.exists());
+        assert!(store.pending_sessions().unwrap().is_empty());
         drop(store);
         fs::remove_dir_all(path).unwrap();
     }

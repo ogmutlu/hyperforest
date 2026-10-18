@@ -96,6 +96,15 @@ export type Action =
       startedAt: number;
       durationMs: number;
     }
+  | {
+      type: "importSession";
+      id: string;
+      title: string;
+      startedAt: number;
+      endedAt: number;
+      durationMs: number;
+      periods: Period[];
+    }
   | { type: "deleteSession"; id: string }
   | { type: "finish"; id: string }
   | { type: "discard" };

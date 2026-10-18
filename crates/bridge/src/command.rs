@@ -85,6 +85,14 @@ pub enum Action {
         started_at: u64,
         duration_ms: u64,
     },
+    ImportSession {
+        id: String,
+        title: String,
+        started_at: u64,
+        ended_at: u64,
+        duration_ms: u64,
+        periods: Vec<crate::document::Period>,
+    },
     DeleteSession {
         id: String,
     },
@@ -286,8 +294,31 @@ pub fn apply(
             started_at,
             duration_ms,
         },
+        Action::ImportSession {
+            id: identity,
+            title: name,
+            started_at,
+            ended_at,
+            duration_ms,
+            periods,
+        } => d::Command::ImportSession {
+            id: id(identity),
+            title: title(name),
+            started_at,
+            ended_at,
+            duration_ms,
+            periods: periods
+                .into_iter()
+                .map(|p| d::Period {
+                    start: p.start,
+                    end: p.end,
+                })
+                .collect(),
+        },
         Action::DeleteSession { id: identity } => d::Command::DeleteSession { id: id(identity) },
     };
+    let imported = matches!(&command, d::Command::ImportSession { .. });
+    let old_node_count = document.nodes.len();
     let arrange_tree = match &command {
         d::Command::Add {
             tree_id,
@@ -301,6 +332,16 @@ pub fn apply(
     if let Some((id, text)) = notes {
         let index = find_node(&document, &id)?;
         document.nodes[index].notes = text;
+    }
+    if imported && document.nodes.len() != old_node_count {
+        let tree_id = document
+            .trees
+            .iter()
+            .find(|tree| tree.title == "hiper")
+            .map(|tree| tree.id.clone());
+        if let Some(tree_id) = tree_id {
+            document = crate::layout::arrange(document, &tree_id)?;
+        }
     }
     if let Some(tree) = arrange_tree {
         document = crate::layout::arrange(document, &tree)?;

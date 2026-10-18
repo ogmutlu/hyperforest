@@ -2017,3 +2017,55 @@ test("history remembers its interval after closing and restarting the interface"
   );
   await expect(history.getByRole("alert")).toHaveCount(0);
 });
+
+test("desktop imports hiper sessions on opening, creates the fallback tree, and hides the inactive estimate field", async ({
+  page,
+}) => {
+  await installDesktopMock(page, {
+    directory: "/tmp/hyperforest-desktop-test",
+    yaml: null,
+    notes: {},
+  });
+  await page.addInitScript(() => {
+    const id = "c".repeat(32);
+    localStorage.setItem(
+      "test.hiper-inbox",
+      JSON.stringify([
+        {
+          filename: `${id}.json`,
+          contents: JSON.stringify({
+            version: 1,
+            id,
+            title: "CLI task",
+            startedAt: 1000,
+            endedAt: 6000,
+            durationMs: 3000,
+            periods: [
+              { start: 1000, end: 2000 },
+              { start: 4000, end: 6000 },
+            ],
+          }),
+        },
+      ]),
+    );
+  });
+  await page.goto("./");
+  await expect(page.getByRole("tab", { name: /^hiper / })).toBeVisible();
+  await page.getByRole("tab", { name: /^hiper / }).click();
+  await page
+    .getByRole("button", { name: "Select CLI task", exact: true })
+    .click();
+  await expect(page.locator(".time-stat")).toContainText("3s");
+  await page.getByRole("button", { name: "Edit goal", exact: true }).click();
+  await expect(
+    page.getByLabel("Markdown notes", { exact: true }),
+  ).toBeVisible();
+  await expect(page.getByText("Time estimate", { exact: false })).toHaveCount(
+    0,
+  );
+  expect(
+    await page.evaluate(() =>
+      JSON.parse(localStorage.getItem("test.hiper-inbox")!),
+    ),
+  ).toEqual([]);
+});

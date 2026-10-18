@@ -24,7 +24,7 @@ npm ci
 rustup target add wasm32-unknown-unknown
 cargo install wasm-bindgen-cli --version 0.2.114 --locked
 npm run desktop:build -- --bundles deb
-sudo apt install ./src-tauri/target/release/bundle/deb/hyperforest_0.1.0_amd64.deb
+sudo apt install ./src-tauri/target/release/bundle/deb/hyperforest_1.0.0_amd64.deb
 ```
 
 Launch **hyperforest** from your application menu, or run

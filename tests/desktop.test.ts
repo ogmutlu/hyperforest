@@ -129,11 +129,14 @@ it("does not change visible state when disk writes fail and serializes successfu
     async (
       _command: string,
       args: { request: ReturnType<typeof diskPayload> },
-    ) => ({
-      directory: "/tmp/forest",
-      yaml: args.request.yaml,
-      notes: args.request.notes,
-    }),
+    ) =>
+      _command === "desktop_pending_sessions"
+        ? []
+        : {
+            directory: "/tmp/forest",
+            yaml: args.request.yaml,
+            notes: args.request.notes,
+          },
   );
   await Promise.all([
     workspace.commit({ type: "create", id: "a", title: "A" }, 3001),
@@ -208,6 +211,7 @@ it("desktop and web exchange the same ZIP in both directions without losing note
       command: string,
       args: { request: ReturnType<typeof diskPayload> },
     ) => {
+      if (command === "desktop_pending_sessions") return [];
       expect(command).toBe("desktop_save");
       return {
         directory: "/tmp/transfer-test",
@@ -225,4 +229,81 @@ it("desktop and web exchange the same ZIP in both directions without losing note
   expect(
     desktop.getSnapshot().nodes.find((node) => node.id === "child")!.notes,
   ).toContain("λ");
+});
+
+it("imports hiper intervals, persists before acknowledgment, and safely replays after a failed save", async () => {
+  const payload = diskPayload(example(), 2000);
+  const workspace = new DesktopWorkspace({
+    directory: "/tmp/forest",
+    ...payload,
+  });
+  const id = "a".repeat(32);
+  const entry = {
+    filename: `${id}.json`,
+    contents: JSON.stringify({
+      version: 1,
+      id,
+      title: "Öğuz / Work",
+      startedAt: 2000,
+      endedAt: 8000,
+      durationMs: 3000,
+      periods: [
+        { start: 2000, end: 3000 },
+        { start: 6000, end: 8000 },
+      ],
+    }),
+  };
+  let fail = true;
+  ipc.mockImplementation(
+    async (
+      command: string,
+      args: {
+        request: ReturnType<typeof diskPayload> & {
+          imported_sessions: string[];
+        };
+      },
+    ) => {
+      if (command === "desktop_pending_sessions") return [entry];
+      if (fail) throw new Error("Disk full");
+      expect(args.request.imported_sessions).toEqual([entry.filename]);
+      return { directory: "/tmp/forest", ...args.request };
+    },
+  );
+  await expect(workspace.flush()).rejects.toThrow("Disk full");
+  expect(workspace.getSnapshot().sessions).toHaveLength(0);
+  fail = false;
+  await workspace.flush();
+  await workspace.flush(); // An inbox entry left after a crash is acknowledged without duplication.
+  expect(workspace.getSnapshot().sessions).toHaveLength(1);
+  expect(workspace.getSnapshot().sessions[0]).toMatchObject({
+    nodeId: "root",
+    durationMs: 3000,
+    periods: JSON.parse(entry.contents).periods,
+  });
+});
+
+it("keeps malformed imports in the inbox while allowing valid sessions and app edits to save", async () => {
+  const payload = diskPayload(example(), 2000);
+  const workspace = new DesktopWorkspace({
+    directory: "/tmp/forest",
+    ...payload,
+  });
+  ipc.mockImplementation(
+    async (
+      command: string,
+      args: {
+        request: ReturnType<typeof diskPayload> & {
+          imported_sessions: string[];
+        };
+      },
+    ) => {
+      if (command === "desktop_pending_sessions")
+        return [{ filename: `${"b".repeat(32)}.json`, contents: "broken" }];
+      expect(args.request.imported_sessions).toEqual([]);
+      return { directory: "/tmp/forest", ...args.request };
+    },
+  );
+  await workspace.commit({ type: "create", id: "other", title: "Other" }, 3000);
+  expect(workspace.getSnapshot().trees).toHaveLength(2);
+  expect(workspace.syncError).toContain("hiper sessions pending");
 });

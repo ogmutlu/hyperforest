@@ -205,7 +205,6 @@ function EditDialog({
 }) {
   const original = useRef(node);
   const [title, setTitle] = useState(node.title);
-  const [estimate, setEstimate] = useState(String(node.estimateMinutes || ""));
   const [notes, setNotes] = useState(node.notes);
   const tree = state.trees.find((item) => item.id === node.treeId);
   const save = (): Promise<boolean> =>
@@ -218,7 +217,7 @@ function EditDialog({
         estimateMinutes: original.current.estimateMinutes,
       },
       title,
-      estimateMinutes: Number(estimate),
+      estimateMinutes: original.current.estimateMinutes,
       notes,
     });
   const submit = async (event: FormEvent): Promise<void> => {
@@ -248,18 +247,6 @@ function EditDialog({
             onChange={(event) => setTitle(event.target.value)}
             maxLength={100}
             required
-          />
-        </label>
-        <label>
-          Time estimate <span>(minutes, optional)</span>
-          <input
-            type="number"
-            disabled={!editing}
-            min="0"
-            step="any"
-            value={estimate}
-            onChange={(event) => setEstimate(event.target.value)}
-            placeholder="No rush"
           />
         </label>
         <label>

@@ -1,5 +1,16 @@
 use crate::{graph::*, model::*, time::*};
-use alloc::vec;
+use alloc::{vec, vec::Vec};
+
+fn import_id(state: &Snapshot, source: &Id, suffix: &[u8]) -> Id {
+    let mut id = source.clone();
+    id.extend_from_slice(suffix);
+    while state.nodes.iter().any(|node| node.id == id)
+        || state.sessions.iter().any(|session| session.id == id)
+    {
+        id.push(b'_');
+    }
+    id
+}
 
 fn active_node(state: &Snapshot, id: &Id) -> Result<usize, Error> {
     let index = node_index(state, id)?;
@@ -300,6 +311,82 @@ pub fn apply(state: &mut Snapshot, command: Command, now: u64) -> Result<(), Err
                     end: ended_at,
                 }],
             });
+        }
+        Command::ImportSession {
+            id,
+            title,
+            started_at,
+            ended_at,
+            duration_ms,
+            periods,
+        } => {
+            // Queue replay after a crash must not add the same session twice.
+            if state.sessions.iter().any(|session| session.id == id) {
+                return Ok(());
+            }
+            let matches: Vec<Id> = state
+                .nodes
+                .iter()
+                .filter(|node| node.title == title)
+                .map(|node| node.id.clone())
+                .collect();
+            let node_id =
+                if matches.len() == 1 {
+                    matches[0].clone()
+                } else {
+                    let tree_id = match state.trees.iter().find(|tree| tree.title == b"hiper") {
+                        Some(tree) => tree.id.clone(),
+                        None => {
+                            let tree_id = import_id(state, &id, b"-tree");
+                            apply(
+                                state,
+                                Command::Create {
+                                    id: tree_id.clone(),
+                                    title: b"hiper".to_vec(),
+                                },
+                                now,
+                            )?;
+                            tree_id
+                        }
+                    };
+                    match state.nodes.iter().find(|node| {
+                        node.parent_id.as_ref() == Some(&tree_id) && node.title == title
+                    }) {
+                        Some(node) => node.id.clone(),
+                        None => {
+                            let node_id = import_id(state, &id, b"-node");
+                            apply(
+                                state,
+                                Command::Add {
+                                    id: node_id.clone(),
+                                    tree_id: tree_id.clone(),
+                                    parent_id: Some(tree_id),
+                                    title,
+                                    linked_tree_id: None,
+                                },
+                                now,
+                            )?;
+                            node_id
+                        }
+                    }
+                };
+            let node = &state.nodes[node_index(state, &node_id)?];
+            if ended_at > now || ended_at < started_at || duration_ms == 0 {
+                return Err(Error::InvalidSession);
+            }
+            let session = Session {
+                id,
+                tree_id: node.tree_id.clone(),
+                node_id: node.id.clone(),
+                credit_node_id: None,
+                title: session_title(state, node),
+                group: node_path(state, &node.id)?,
+                started_at,
+                ended_at,
+                duration_ms,
+                periods,
+            };
+            state.sessions.push(session);
         }
         Command::DeleteSession { id } => {
             let mut index = 0;

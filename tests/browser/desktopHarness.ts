@@ -40,7 +40,11 @@ export async function installDesktopMock(
           command: string,
           args: {
             directory?: string;
-            request?: { yaml: string; notes: Record<string, string> };
+            request?: {
+              yaml: string;
+              notes: Record<string, string>;
+              imported_sessions?: string[];
+            };
             value?: number;
             event?: string;
             handler?: number;
@@ -94,6 +98,8 @@ export async function installDesktopMock(
             return "/tmp/hyperforest-desktop-test";
           if (command === "desktop_select")
             return { directory: args.directory, yaml: null, notes: {} };
+          if (command === "desktop_pending_sessions")
+            return JSON.parse(localStorage.getItem("test.hiper-inbox") ?? "[]");
           if (command === "desktop_save") {
             if (localStorage.getItem("test.fail-save") === "yes")
               throw new Error("Disk is full");
@@ -105,6 +111,18 @@ export async function installDesktopMock(
               notes: args.request!.notes,
             };
             localStorage.setItem(key, JSON.stringify(loaded));
+            const inbox = JSON.parse(
+              localStorage.getItem("test.hiper-inbox") ?? "[]",
+            ) as { filename: string; contents: string }[];
+            localStorage.setItem(
+              "test.hiper-inbox",
+              JSON.stringify(
+                inbox.filter(
+                  (entry) =>
+                    !args.request!.imported_sessions?.includes(entry.filename),
+                ),
+              ),
+            );
             return loaded;
           }
           if (command === "desktop_enable_backups") return null;
