@@ -121,7 +121,8 @@ pub fn validate(state: &Snapshot) -> Result<(), Error> {
             }
             j += 1;
         }
-        if session.ended_at < session.started_at
+        if session.imported_at.is_some_and(|at| at < session.ended_at)
+            || session.ended_at < session.started_at
             || session.duration_ms > session.ended_at - session.started_at
         {
             return Err(Error::InvalidSession);

@@ -140,7 +140,11 @@ pub fn totals(state: &Snapshot, now: u64, from: Option<u64>) -> Result<Vec<u64>,
                     let mut s = 0;
                     while s < state.sessions.len() {
                         let session = &state.sessions[s];
-                        if session.tree_id == tree.id && session.started_at >= tree.created_at {
+                        // Explicit imports belong to the tree at import time, even when
+                        // the recorded focus happened before the tree existed.
+                        if session.tree_id == tree.id
+                            && session.imported_at.unwrap_or(session.started_at) >= tree.created_at
+                        {
                             let duration = match from {
                                 Some(start) => session_between(session, start, now)?,
                                 None => session.duration_ms,

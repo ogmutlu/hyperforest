@@ -4,6 +4,7 @@ Hyperforest v1.0.0 for Linux x86-64, updated with hiper session integration.
 - Notes no longer displays the inactive time-estimate field.
 - Import saved hiper sessions from the selected workspace folder, preserving pause intervals and avoiding duplicate imports.
 - Sessions attach to a node with an exact, unique title match. Missing or ambiguous titles go to a matching node under the `hiper` tree; the tree and node are created as needed.
+- Imported history contributes to goal totals even when the session predates the tree.
 - Local workspace files, daily backups, ZIP import/export, system tray controls, and persistent interface zoom.
 
 To connect an updated hiper checkout, open its **Settings (F7)** and select the

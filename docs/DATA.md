@@ -64,6 +64,12 @@ zero elapsed time needs no intervals. Focus records can likewise omit `periods`
 when `elapsedMs` is zero or equals `runningSince - startedAt`. Missing intervals
 with ambiguous pause locations are rejected, rather than estimated.
 
+Sessions imported from hiper also record `importedAt`: the time the session was
+assigned to its current node. This makes historical focus count toward the node
+and its ancestors even when the tree was created after the session took place.
+Original session timestamps and pause intervals remain unchanged. Sessions without
+`importedAt` retain the existing creation-time accounting boundary.
+
 The Rust domain always receives explicit periods, and saves/exports always write
 them. For focus records, their sum is the accumulated `elapsedMs`, and
 `runningSince` records the current open interval or is null.

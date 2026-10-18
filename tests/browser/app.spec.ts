@@ -2068,4 +2068,28 @@ test("desktop imports hiper sessions on opening, creates the fallback tree, and 
       JSON.parse(localStorage.getItem("test.hiper-inbox")!),
     ),
   ).toEqual([]);
+  await page.getByRole("button", { name: "Close dialog", exact: true }).click();
+  await page.reload();
+  await expect(page.getByRole("tab", { name: /^hiper / })).toBeVisible();
+  await expect(page.locator(".time-stat")).toContainText("3s");
+  await page
+    .getByRole("button", { name: "Select CLI task", exact: true })
+    .click();
+  await expect(page.locator(".time-stat")).toContainText("3s");
+  const files = await page.evaluate(
+    () =>
+      JSON.parse(localStorage.getItem("test.desktop.files")!) as {
+        yaml: string;
+      },
+  );
+  const { parse } = await import("yaml");
+  const saved = parse(files.yaml) as {
+    sessions: { importedAt: number; startedAt: number; durationMs: number }[];
+  };
+  expect(saved.sessions).toHaveLength(1);
+  expect(saved.sessions[0]).toMatchObject({
+    startedAt: 1000,
+    durationMs: 3000,
+  });
+  expect(saved.sessions[0]!.importedAt).toBeGreaterThan(6000);
 });

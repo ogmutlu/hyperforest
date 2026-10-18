@@ -39,6 +39,7 @@ export interface Focus {
 }
 export interface Session {
   id: string;
+  importedAt?: number;
   treeId: string;
   nodeId: string;
   creditNodeId?: string;

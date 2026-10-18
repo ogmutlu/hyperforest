@@ -53,6 +53,8 @@ pub struct Period {
 #[serde(rename_all = "camelCase")]
 pub struct Session {
     pub id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub imported_at: Option<u64>,
     pub tree_id: String,
     pub node_id: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -184,6 +186,9 @@ impl Document {
             }
         }
         for session in &self.sessions {
+            if let Some(at) = session.imported_at {
+                safe_number(at)?;
+            }
             safe_number(session.started_at)?;
             safe_number(session.ended_at)?;
             safe_number(session.duration_ms)?;
@@ -246,6 +251,7 @@ impl Document {
             .iter()
             .map(|s| {
                 Ok(d::Session {
+                    imported_at: s.imported_at,
                     id: s.id.as_bytes().to_vec(),
                     tree_id: s.tree_id.as_bytes().to_vec(),
                     node_id: s.node_id.as_bytes().to_vec(),
@@ -339,6 +345,7 @@ impl Document {
             .iter()
             .map(|s| {
                 Ok(Session {
+                    imported_at: s.imported_at,
                     id: text(&s.id)?,
                     tree_id: text(&s.tree_id)?,
                     node_id: text(&s.node_id)?,

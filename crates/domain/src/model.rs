@@ -40,6 +40,8 @@ pub struct Period {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Session {
     pub id: Id,
+    /// When external history was explicitly assigned to the current tree.
+    pub imported_at: Option<u64>,
     pub tree_id: Id,
     pub node_id: Id,
     pub credit_node_id: Option<Id>,

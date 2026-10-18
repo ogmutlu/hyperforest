@@ -25,6 +25,7 @@ fn save_focus(state: &mut Snapshot, session_id: Id, now: u64) -> Result<(), Erro
         let duration = focus_elapsed(focus, now)?;
         let periods = focus_periods(focus, now);
         state.sessions.push(Session {
+            imported_at: None,
             id: session_id,
             tree_id: focus.tree_id.clone(),
             node_id: focus.node_id.clone(),
@@ -297,6 +298,7 @@ pub fn apply(state: &mut Snapshot, command: Command, now: u64) -> Result<(), Err
                 return Err(Error::InvalidSession);
             }
             state.sessions.push(Session {
+                imported_at: None,
                 id,
                 tree_id: node.tree_id.clone(),
                 node_id: node.id.clone(),
@@ -375,6 +377,7 @@ pub fn apply(state: &mut Snapshot, command: Command, now: u64) -> Result<(), Err
                 return Err(Error::InvalidSession);
             }
             let session = Session {
+                imported_at: Some(now),
                 id,
                 tree_id: node.tree_id.clone(),
                 node_id: node.id.clone(),

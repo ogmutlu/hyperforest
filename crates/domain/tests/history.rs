@@ -9,6 +9,7 @@ fn session(id: u8, periods: &[(u64, u64)]) -> Session {
         })
         .collect();
     Session {
+        imported_at: None,
         id: vec![id],
         tree_id: vec![1],
         node_id: vec![1],

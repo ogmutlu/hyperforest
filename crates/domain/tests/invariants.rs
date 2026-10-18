@@ -315,3 +315,69 @@ fn hiper_import_matches_titles_and_falls_back_to_a_reusable_hiper_tree() {
     }
     assert_eq!(state.apply(invalid, 9000), Err(Error::InvalidSession));
 }
+
+#[test]
+fn imported_history_credits_new_and_existing_trees_without_changing_session_dates() {
+    let state = tree()
+        .apply(import_session("older", "Work"), 10000)
+        .unwrap();
+    assert_eq!(
+        time::totals(state.snapshot(), 10000, None).unwrap(),
+        vec![3000]
+    );
+    // A new fallback tree is necessarily created after the imported session ended.
+    let state = state
+        .apply(import_session("fallback", "CLI task"), 20000)
+        .unwrap();
+    let snapshot = state.snapshot();
+    let session = &snapshot.sessions[1];
+    assert_eq!(session.imported_at, Some(20000));
+    assert_eq!((session.started_at, session.ended_at), (2000, 8000));
+    let values = time::totals(snapshot, 20000, None).unwrap();
+    let imported_node = snapshot
+        .nodes
+        .iter()
+        .position(|node| node.id == session.node_id)
+        .unwrap();
+    let root = snapshot
+        .nodes
+        .iter()
+        .position(|node| node.id == session.tree_id)
+        .unwrap();
+    assert_eq!(values[imported_node], 3000);
+    assert_eq!(values[root], 3000);
+    let clipped = time::totals(snapshot, 7000, Some(4000)).unwrap();
+    assert_eq!(clipped[imported_node], 1000);
+    assert_eq!(clipped[root], 1000);
+    // An explicit import into an existing newer tree is counted as well.
+    let state = state
+        .apply(
+            Command::Create {
+                id: id("new"),
+                title: id("New"),
+            },
+            30000,
+        )
+        .unwrap();
+    let state = state
+        .apply(import_session("matched", "New"), 40000)
+        .unwrap();
+    assert_eq!(
+        *time::totals(state.snapshot(), 40000, None)
+            .unwrap()
+            .last()
+            .unwrap(),
+        3000
+    );
+    // The existing creation-time protection for ordinary saved sessions remains.
+    let mut original_history = state.snapshot().clone();
+    original_history.sessions.last_mut().unwrap().imported_at = None;
+    let original_history = State::new(original_history).unwrap();
+    assert_eq!(
+        *time::totals(original_history.snapshot(), 40000, None)
+            .unwrap()
+            .last()
+            .unwrap(),
+        0
+    );
+}
