@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState, useRef } from "react";
 import { connectTray } from "./tray";
 import { App } from "./App";
+import { TutorialButton } from "./Tutorial";
 import { DesktopSaveStatus } from "./DesktopSaveStatus";
 import { chooseDesktop, loadDesktop } from "./desktop";
 import type { DesktopWorkspace } from "./desktop";
@@ -212,6 +213,9 @@ export function DesktopApp() {
           </button>
           {zoomControls}
           {!ready && <p>Loading…</p>}
+          <footer className="page-footer">
+            <TutorialButton />
+          </footer>
         </main>
       )}
     </>

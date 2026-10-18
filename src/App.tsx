@@ -2,6 +2,7 @@ import { TodayCounter } from "./Clock";
 import { SessionHistory } from "./SessionHistory";
 import { FocusSession } from "./FocusSession";
 import { ActionMenu } from "./ActionMenu";
+import { TutorialButton } from "./Tutorial";
 import {
   createContext,
   useCallback,
@@ -787,6 +788,7 @@ export function App({
         )}
         <footer className="page-footer">
           <span>Less overwhelm. More intention.</span>
+          <TutorialButton />
           <span>
             hyperforest <i>✦</i> a space to grow
           </span>

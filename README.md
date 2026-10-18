@@ -37,6 +37,11 @@ then run `npm run desktop:dev`.
 
 ## Use
 
+On first launch, the website and desktop app open a short tutorial covering
+hypertrees, graph editing, focus sessions, notes, history, and backups. Skip or
+finish it to dismiss it on this device. Use **Tutorial** at the bottom to open it
+again, including on the desktop directory-selection screen.
+
 Create a hypertree, enable **Edit graph**, and add goals. Drag vertices to place
 them and drag edge handles to reconnect them. **Options (gear) → pedantic** requires
 connected graphs and connected color classes. It is off by default.
@@ -137,3 +142,7 @@ name under the `hiper` tree receives it; the tree and node are created as needed
 The import preserves pause intervals and leaves any active desktop timer alone.
 Inbox files are removed only after the updated workspace is saved, and replaying
 an entry does not duplicate the session. Invalid files remain with a sync error.
+
+## License
+
+Hyperforest is licensed under the [MIT License](LICENSE).

@@ -7,6 +7,13 @@ import { diskPayload, diskState } from "../../src/desktop";
 import type { State } from "../../src/model";
 import { installDesktopMock } from "./desktopHarness";
 
+test.beforeEach(async ({ context }) => {
+  await context.addInitScript(() => {
+    localStorage.setItem("hyperforest.tutorial.web.v1", "seen");
+    localStorage.setItem("hyperforest.tutorial.desktop.v1", "seen");
+  });
+});
+
 async function action(page: Page, name: string): Promise<void> {
   await page.getByLabel("Workspace actions", { exact: true }).click();
   await page.getByRole("button", { name, exact: true }).click();

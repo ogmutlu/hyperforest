@@ -304,6 +304,8 @@ h2 {
 }
 .page-footer {
   display: flex;
+  align-items: center;
+  flex-wrap: wrap;
   justify-content: space-between;
   border-top: 1px solid var(--line);
   padding: 20px 2px 25px;
@@ -330,6 +332,87 @@ h2 {
 .dialog::backdrop {
   background: #060c15bb;
   backdrop-filter: blur(7px);
+}
+.tutorial-dialog {
+  width: min(580px, calc(100vw - 32px));
+}
+.tutorial-dialog[open] {
+  display: flex;
+  flex-direction: column;
+}
+.tutorial-dialog > :not(.tutorial-lesson) {
+  flex-shrink: 0;
+}
+.tutorial-lesson {
+  min-height: 0;
+  overflow-y: auto;
+}
+.tutorial-illustration {
+  position: relative;
+  height: 110px;
+  margin: 22px 0;
+  color: var(--gold);
+  background: radial-gradient(ellipse, #dfc4910c, transparent 70%);
+}
+.tutorial-illustration > svg {
+  width: 100%;
+  height: 100%;
+  stroke: #786e56;
+  stroke-width: 1.5;
+}
+.tutorial-illustration circle {
+  fill: #1e292e;
+  stroke: var(--gold);
+}
+.tutorial-illustration > span {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+}
+.tutorial-lesson h2 {
+  margin: 10px 0 18px;
+}
+.tutorial-lesson h2:focus {
+  outline: none;
+}
+.tutorial-lesson .tutorial-tip {
+  margin-top: 16px;
+  padding: 14px 16px;
+  border-left: 2px solid #8c7b5a;
+  background: #dfc49108;
+  color: #c8d1d3;
+}
+.tutorial-progress {
+  display: flex;
+  justify-content: center;
+  margin-top: 18px;
+}
+.tutorial-progress button {
+  min-width: 30px;
+  min-height: 34px;
+  border: 0;
+  background: transparent;
+}
+.tutorial-progress span {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #46545f;
+}
+.tutorial-progress [aria-current="step"] span {
+  background: var(--gold);
+}
+.tutorial-actions,
+.tutorial-actions > div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.tutorial-actions {
+  margin-top: 14px;
 }
 .dialog h2 {
   font-size: 31px;
@@ -523,6 +606,14 @@ form > .primary-button {
   }
   .dialog h2 {
     font-size: 28px;
+  }
+  .tutorial-illustration {
+    height: 70px;
+    margin: 12px 0;
+  }
+  .tutorial-dialog .tutorial-tip {
+    padding: 10px 12px;
+    margin-top: 12px;
   }
 }
 @media (prefers-reduced-motion: reduce) {

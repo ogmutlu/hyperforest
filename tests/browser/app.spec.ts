@@ -122,6 +122,8 @@ test.beforeEach(async ({ page }) => {
     Date.now(),
   );
   await page.addInitScript((state) => {
+    localStorage.setItem("hyperforest.tutorial.web.v1", "seen");
+    localStorage.setItem("hyperforest.tutorial.desktop.v1", "seen");
     if (!localStorage.getItem("hyperforest.workspace.v1"))
       localStorage.setItem("hyperforest.workspace.v1", JSON.stringify(state));
   }, fixture);
