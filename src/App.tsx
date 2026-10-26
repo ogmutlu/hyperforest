@@ -2,13 +2,17 @@ import { TodayCounter } from "./Clock";
 import { SessionHistory } from "./SessionHistory";
 import { FocusSession } from "./FocusSession";
 import { ActionMenu } from "./ActionMenu";
-import { TutorialButton } from "./Tutorial";
+import { TutorialButton } from "./TutorialContext";
+import { VertexFields } from "./VertexFields";
+import { VertexDetails } from "./VertexDetails";
+import { defaultVertex, VERTEX_KINDS } from "./vertices";
 import {
   createContext,
   useCallback,
   useMemo,
   useContext,
   useEffect,
+  useLayoutEffect,
   useRef,
   useState,
   useSyncExternalStore,
@@ -21,14 +25,8 @@ import {
   formatTime,
   shortTime,
 } from "./presentation";
-import {
-  canLinkTree,
-  focusElapsed,
-  subtreeIds,
-  nodePath,
-  totals,
-} from "./domainClient";
-import type { Action, GoalNode, State } from "./model";
+import { canLinkTree, focusElapsed, subtreeIds, totals } from "./domainClient";
+import type { Action, GoalNode, State, VertexSettings } from "./model";
 import { DesktopWorkspace, desktopEnabled } from "./desktop";
 import { openDesktopArchive, saveArchive } from "./archiveTransfer";
 import { exportArchive, archiveBackup } from "./export";
@@ -51,22 +49,28 @@ function Dialog({
   close,
   label,
   className = "",
+  initialFocus,
 }: {
   children: React.ReactNode;
   close: () => void;
   label: string;
   className?: string;
+  initialFocus?: React.RefObject<HTMLElement | null>;
 }) {
   const ref = useRef<HTMLDialogElement>(null);
   const error = useContext(ErrorContext);
-  useEffect(() => {
+  useLayoutEffect(() => {
+    const previousFocus = document.activeElement;
     ref.current?.showModal();
+    initialFocus?.current?.focus({ preventScroll: true });
     const previous = document.body.style.overflow;
     document.body.style.overflow = "hidden";
     return () => {
       document.body.style.overflow = previous;
+      if (previousFocus instanceof HTMLElement && previousFocus.isConnected)
+        previousFocus.focus({ preventScroll: true });
     };
-  }, []);
+  }, [initialFocus]);
   return (
     <dialog
       ref={ref}
@@ -299,9 +303,11 @@ function EditDialog({
 export function App({
   workspace,
   showSaveStatus = true,
+  practice = false,
 }: {
   workspace: Workspace;
   showSaveStatus?: boolean;
+  practice?: boolean;
 }) {
   const state = useSyncExternalStore(
     workspace.subscribe,
@@ -319,6 +325,7 @@ export function App({
   const [dialog, setDialog] = useState<
     | "tree"
     | "child"
+    | "vertex"
     | "color"
     | "edit"
     | "delete"
@@ -332,8 +339,14 @@ export function App({
   >(null);
   const [pendingImport, setPendingImport] = useState<State | null>(null);
   const [editing, setEditing] = useState(false);
-  const [newParent, setNewParent] = useState("");
   const [newName, setNewName] = useState("");
+  const newNameInput = useRef<HTMLInputElement>(null);
+  const [newVertex, setNewVertex] = useState<VertexSettings>({
+    kind: "vanilla",
+  });
+  const [vertexSettings, setVertexSettings] = useState<VertexSettings>({
+    kind: "vanilla",
+  });
   const [linkedTreeId, setLinkedTreeId] = useState("");
   const [customColor, setCustomColor] = useState("#dfc491");
   const importInput = useRef<HTMLInputElement>(null);
@@ -398,6 +411,7 @@ export function App({
   }, [workspace]);
   const running = focus !== null && focus.runningSince !== null;
   useEffect(() => {
+    if (practice) return;
     if (!focus) {
       document.title = "hyperforest — a little structure";
       return;
@@ -409,7 +423,7 @@ export function App({
     if (!running) return;
     const timer = setInterval(updateTitle, 1000);
     return () => clearInterval(timer);
-  }, [running, focus]);
+  }, [running, focus, practice]);
   const start = useCallback(
     async (id: string): Promise<void> => {
       if (await run({ type: "start", id })) {
@@ -429,16 +443,18 @@ export function App({
         setDialog(null);
       }
     } else if (
-      node &&
+      tree &&
       (await run({
-        type: "add",
+        type: "isolate",
         id,
-        parentId: newParent || node.id,
+        treeId: tree.id,
         title: newName,
+        vertex: newVertex,
         ...(linkedTreeId ? { linkedTreeId } : {}),
       }))
     ) {
       setSelected(id);
+      setEditing(true);
       setDialog(null);
     }
   };
@@ -505,7 +521,12 @@ export function App({
       <main>
         <header className="topbar">
           <div className="brand-today">
-            <a className="brand" href="./" aria-label="hyperforest home">
+            <a
+              className="brand"
+              href="./"
+              aria-label="hyperforest home"
+              onClick={practice ? (event) => event.preventDefault() : undefined}
+            >
               <span className="brand-icon">
                 <Icon name="tree" size={21} />
               </span>
@@ -549,54 +570,56 @@ export function App({
               </span>
             )}
 
-            <ActionMenu label="Workspace actions">
-              {state.trees.length > 1 && (
+            {!practice && (
+              <ActionMenu label="Workspace actions">
+                {state.trees.length > 1 && (
+                  <button
+                    className="quiet-button"
+                    onClick={() => setDialog("tabs")}
+                  >
+                    Rearrange tabs
+                  </button>
+                )}
                 <button
                   className="quiet-button"
-                  onClick={() => setDialog("tabs")}
+                  disabled={busy}
+                  onClick={() => {
+                    void exportWorkspace();
+                  }}
                 >
-                  Rearrange tabs
+                  <Icon name="download" /> Export
                 </button>
-              )}
-              <button
-                className="quiet-button"
-                disabled={busy}
-                onClick={() => {
-                  void exportWorkspace();
-                }}
-              >
-                <Icon name="download" /> Export
-              </button>
-              <button
-                className="quiet-button"
-                disabled={busy}
-                onClick={() => {
-                  if (desktopEnabled) void importDesktop();
-                  else importInput.current?.click();
-                }}
-              >
-                <Icon name="upload" /> Import
-              </button>
-              <input
-                ref={importInput}
-                hidden
-                type="file"
-                accept="application/zip,.zip"
-                aria-label="Import backup"
-                onChange={(event) => {
-                  void importFile(event.target.files?.[0]);
-                  event.target.value = "";
-                }}
-              />
+                <button
+                  className="quiet-button"
+                  disabled={busy}
+                  onClick={() => {
+                    if (desktopEnabled) void importDesktop();
+                    else importInput.current?.click();
+                  }}
+                >
+                  <Icon name="upload" /> Import
+                </button>
+                <input
+                  ref={importInput}
+                  hidden
+                  type="file"
+                  accept="application/zip,.zip"
+                  aria-label="Import backup"
+                  onChange={(event) => {
+                    void importFile(event.target.files?.[0]);
+                    event.target.value = "";
+                  }}
+                />
 
-              <button
-                className="quiet-button danger"
-                disabled={busy}
-                onClick={() => setDialog("clear")}
-              >
-                <Icon name="trash" /> Clear local data
-              </button>
-            </ActionMenu>
+                <button
+                  className="quiet-button danger"
+                  disabled={busy}
+                  onClick={() => setDialog("clear")}
+                >
+                  <Icon name="trash" /> Clear local data
+                </button>
+              </ActionMenu>
+            )}
           </div>
         </header>
 
@@ -653,26 +676,6 @@ export function App({
                 <div className="selection-actions">
                   <button
                     className="quiet-button"
-                    disabled={busy || node.finishedAt !== undefined}
-                    onClick={() => {
-                      setNewName("");
-                      setLinkedTreeId("");
-                      setNewParent(node.id);
-                      setDialog("child");
-                    }}
-                  >
-                    <Icon name="plus" size={16} /> New vertex
-                  </button>
-                  <button
-                    className="quiet-button"
-                    aria-pressed={editing}
-                    onClick={() => setEditing((value) => !value)}
-                  >
-                    <Icon name={editing ? "check" : "pencil"} size={16} />{" "}
-                    {editing ? "Done editing" : "Edit graph"}
-                  </button>
-                  <button
-                    className="quiet-button"
                     aria-label="Edit goal"
                     disabled={busy}
                     onClick={() => setDialog("edit")}
@@ -687,14 +690,6 @@ export function App({
                     }}
                   >
                     <Icon name="play" size={16} /> Focus
-                  </button>
-                  <button
-                    className="icon-button"
-                    aria-label="Options"
-                    title="Options"
-                    onClick={() => setDialog("options")}
-                  >
-                    <Icon name="settings" size={18} />
                   </button>
                 </div>
               </div>
@@ -735,6 +730,18 @@ export function App({
                 </div>
               )}
 
+              <VertexDetails
+                key={node.id}
+                node={node}
+                busy={busy}
+                editing={editing}
+                run={run}
+                configure={() => {
+                  setVertexSettings(node.vertex ?? { kind: "vanilla" });
+                  setDialog("vertex");
+                }}
+              />
+
               <div className="child-list" aria-label="Child vertices">
                 {children.length ? (
                   children.map((child) => (
@@ -767,6 +774,62 @@ export function App({
                 start={start}
                 run={run}
               />
+              <nav className="graph-tools" aria-label="Graph tools">
+                <div
+                  className="graph-tool-group"
+                  role="group"
+                  aria-label="Graph controls"
+                >
+                  <button
+                    className="graph-tool-button"
+                    aria-label={editing ? "Done editing" : "Edit graph"}
+                    aria-pressed={editing}
+                    onClick={() => setEditing((value) => !value)}
+                  >
+                    <Icon name={editing ? "check" : "pencil"} size={22} />
+                    <span className="graph-tool-tooltip" aria-hidden="true">
+                      {editing ? "Done editing" : "Edit graph"}
+                    </span>
+                  </button>
+                  <button
+                    className="graph-tool-button"
+                    aria-label="Options"
+                    onClick={() => setDialog("options")}
+                  >
+                    <Icon name="settings" size={22} />
+                    <span className="graph-tool-tooltip" aria-hidden="true">
+                      Options
+                    </span>
+                  </button>
+                </div>
+                <hr className="graph-tools-separator" />
+                <div
+                  className="vertex-creation-menu graph-tool-group"
+                  role="group"
+                  aria-label="Create a vertex"
+                >
+                  {VERTEX_KINDS.map(({ kind, label, icon }) => (
+                    <button
+                      key={kind}
+                      className="graph-tool-button"
+                      aria-label={`Create ${kind} vertex`}
+                      disabled={busy}
+                      onClick={() => {
+                        setNewName("");
+                        setLinkedTreeId("");
+                        setNewVertex(defaultVertex(kind));
+                        setError("");
+                        setDialog("child");
+                      }}
+                    >
+                      <Icon name={icon} size={22} />
+                      <span className="graph-tool-tooltip" aria-hidden="true">
+                        {label}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              </nav>
             </section>
           </div>
         ) : (
@@ -787,11 +850,8 @@ export function App({
           </section>
         )}
         <footer className="page-footer">
-          <span>Less overwhelm. More intention.</span>
-          <TutorialButton />
-          <span>
-            hyperforest <i>✦</i> a space to grow
-          </span>
+          {!practice && <TutorialButton />}
+          <span>hyperforest</span>
         </footer>
         {focus && focusNode && (
           <FocusSession
@@ -948,51 +1008,41 @@ export function App({
         {(dialog === "tree" || dialog === "child") && (
           <Dialog
             close={() => setDialog(null)}
-            label={dialog === "tree" ? "Create hypertree" : "Add child goal"}
+            initialFocus={newNameInput}
+            label={
+              dialog === "tree"
+                ? "Create hypertree"
+                : `Create ${newVertex.kind} vertex`
+            }
           >
             <div className="eyebrow">
               {dialog === "tree"
                 ? "SOMETHING WORTH GROWING"
-                : "ONE SMALLER STEP"}
+                : VERTEX_KINDS.find(
+                    (item) => item.kind === newVertex.kind,
+                  )?.label.toUpperCase()}
             </div>
             <h2>
               {dialog === "tree"
                 ? "What are you working toward?"
-                : `A new child of ${state.nodes.find((item) => item.id === newParent)?.title ?? node?.title ?? "your goal"}.`}
+                : `Create a ${newVertex.kind} vertex.`}
             </h2>
             <form
               onSubmit={(event) => {
                 void create(event);
               }}
             >
-              {dialog === "child" && node && (
-                <label>
-                  Parent vertex
-                  <select
-                    aria-label="Parent vertex"
-                    value={newParent || node.id}
-                    disabled={busy}
-                    onChange={(event) => setNewParent(event.target.value)}
-                  >
-                    {state.nodes
-                      .filter(
-                        (item) =>
-                          item.treeId === node.treeId &&
-                          item.finishedAt === undefined,
-                      )
-                      .map((item) => (
-                        <option key={item.id} value={item.id}>
-                          {nodePath(state, item.id)}
-                        </option>
-                      ))}
-                  </select>
-                </label>
+              {dialog === "child" && tree?.pedantic && (
+                <p className="creation-hint">
+                  Turn off pedantic in Options to create an isolated vertex.
+                  Connect it before enabling pedantic again.
+                </p>
               )}
               {dialog === "child" && node && (
                 <label>
-                  Vertex type
+                  Link another hypertree
                   <select
-                    aria-label="Vertex type"
+                    aria-label="Link another hypertree"
                     value={linkedTreeId}
                     onChange={(event) => {
                       setLinkedTreeId(event.target.value);
@@ -1003,7 +1053,7 @@ export function App({
                       );
                     }}
                   >
-                    <option value="">New goal</option>
+                    <option value="">No hypertree link</option>
                     <optgroup label="Link another hypertree">
                       {state.trees
                         .filter((tree) =>
@@ -1027,6 +1077,7 @@ export function App({
               <label>
                 {dialog === "tree" ? "Hypertree name" : "Goal name"}
                 <input
+                  ref={newNameInput}
                   autoFocus
                   required
                   maxLength={100}
@@ -1035,13 +1086,50 @@ export function App({
                   placeholder={
                     dialog === "tree"
                       ? "A project, a practice, a possibility…"
-                      : "Something small enough to begin…"
+                      : undefined
                   }
                 />
               </label>
-              <button className="primary-button" type="submit" disabled={busy}>
-                {dialog === "tree" ? "Create hypertree" : "Add vertex"}
+              {dialog === "child" && (
+                <VertexFields
+                  value={newVertex}
+                  onChange={setNewVertex}
+                  disabled={busy}
+                />
+              )}
+              <button
+                className="primary-button"
+                type="submit"
+                disabled={busy || (dialog === "child" && tree?.pedantic)}
+              >
+                {dialog === "tree" ? "Create hypertree" : "Create vertex"}
                 <Icon name="plus" />
+              </button>
+            </form>
+          </Dialog>
+        )}
+        {dialog === "vertex" && node && (
+          <Dialog close={() => setDialog(null)} label="Vertex settings">
+            <h2>{node.title}</h2>
+            <form
+              onSubmit={(event) => {
+                event.preventDefault();
+                void run({
+                  type: "configureVertex",
+                  id: node.id,
+                  vertex: vertexSettings,
+                }).then((success) => {
+                  if (success) setDialog(null);
+                });
+              }}
+            >
+              <VertexFields
+                value={vertexSettings}
+                onChange={setVertexSettings}
+                disabled={busy}
+              />
+              <button className="primary-button" type="submit" disabled={busy}>
+                Save settings <Icon name="check" />
               </button>
             </form>
           </Dialog>
@@ -1398,6 +1486,7 @@ export function App({
             className="history-dialog"
           >
             <SessionHistory
+              persistPreferences={!practice}
               state={state}
               busy={busy}
               selectedNodeId={node?.id}

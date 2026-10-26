@@ -15,6 +15,12 @@ export type IconName =
   | "fit"
   | "trash"
   | "tree"
+  | "vertex"
+  | "deadline"
+  | "thought"
+  | "reading"
+  | "habit"
+  | "external"
   | "check";
 export function Icon({
   name,
@@ -43,6 +49,16 @@ export function Icon({
     trash: "M3 6h18M9 6V3h6v3M6 6l1 15h10l1-15M10 10v7m4-7v7",
     tree: "M12 5 5 18m7-13 7 13M9 5a3 3 0 1 0 6 0 3 3 0 1 0-6 0M2 19a3 3 0 1 0 6 0 3 3 0 1 0-6 0m14 0a3 3 0 1 0 6 0 3 3 0 1 0-6 0",
     check: "m5 12 4 4L19 6",
+    vertex: "M20 12a8 8 0 1 0-16 0 8 8 0 1 0 16 0M12 8v8m-4-4h8",
+    deadline:
+      "M20 13a8 8 0 1 0-16 0 8 8 0 1 0 16 0M12 9v5l3 2M9 2h6m-3 0v3m6 2 2-2",
+    thought:
+      "M21 11c0 5-4 8-10 8l-5 3 1-4C4 17 2 14 2 11c0-5 4-8 10-8s9 3 9 8ZM7 11h.01M12 11h.01M17 11h.01",
+    reading:
+      "M12 5C9 3 5 3 2 4v15c3-1 7-1 10 1m0-15c3-2 7-2 10-1v15c-3-1-7-1-10 1Zm-7 3h4m-4 4h4m6-4h4m-4 4h4",
+    habit:
+      "M20 7a9 9 0 0 0-15-2L2 8m0-5v5h5M4 17a9 9 0 0 0 15 2l3-3m0 5v-5h-5m-8-4 2 2 4-4",
+    external: "M14 3h7v7m0-7L10 14M10 4H4v16h16v-6",
   };
   return (
     <svg

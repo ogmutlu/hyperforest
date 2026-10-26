@@ -17,7 +17,7 @@ candidate theorems.
 ## Start
 
 Linux x86-64 desktop packages are available from [GitHub Releases](https://github.com/ogmutlu/hyperforest/releases).
-Download the `.deb` and install it with `sudo apt install ./hyperforest_1.0.0_amd64.deb`.
+Download the `.deb` and install it with `sudo apt install ./hyperforest_1.1.0_amd64.deb`.
 
 Requires Node 24+, npm, Rust/Cargo, and these one-time tools:
 
@@ -37,13 +37,32 @@ then run `npm run desktop:dev`.
 
 ## Use
 
-On first launch, the website and desktop app open a short tutorial covering
-hypertrees, graph editing, focus sessions, notes, history, and backups. Skip or
-finish it to dismiss it on this device. Use **Tutorial** at the bottom to open it
-again, including on the desktop directory-selection screen.
+On first launch, the website and desktop app offer an interactive practice
+walkthrough. Use the actual controls to create all five vertex kinds, drag and
+connect a vertex, save a note and focus session, count a habit repetition, and
+filter session history. The guide highlights the relevant controls and advances
+when you perform each action. Practice runs in memory; it does not change your
+workspace, desktop files, or saved history filters. Skip or finish it to dismiss
+it on this device. Use **Tutorial** at the bottom to practice again, including
+before choosing a desktop directory.
 
-Create a hypertree, select a goal, and choose **New vertex** to add a goal beneath
-it. Enable **Edit graph** to drag vertices into place and drag edge handles to
+Create a hypertree. The right column holds Edit graph and Options at the top,
+then a divider and five creation buttons below. Hover or focus a symbol to see
+its name. New vertices start isolated, without a parent prompt; use edge handles
+in edit mode to connect them when you want. Choose a vanilla goal, a deadline
+with a live countdown, a thought inside a text-sized oval, a reading with an
+optional file path or website, or a habit with a repetition target per day, week,
+or month. Record and undo habit repetitions from the selected vertex's counter.
+Weeks start on Monday; progress uses the local calendar, and total repetitions
+remain saved across periods. Reading websites open in a new browser tab; desktop
+attachments open in the system viewer. Local file paths are retained on the web
+and can be opened from desktop. Backup ZIPs retain attachment paths, not their files.
+
+Creation immediately selects the new vertex and turns on Edit graph, ready for
+dragging or connecting. It places only the new vertex; existing positions stay
+unchanged. Use
+**Fit graph** to see vertices beyond the current view, or **Arrange vertices**
+in edit mode to request a new layout. Enable **Edit graph** to drag vertices into place and drag edge handles to
 reconnect them. A small document symbol marks vertices with nonblank notes.
 **Options (gear) → pedantic** requires
 connected graphs and connected color classes. It is off by default.
@@ -65,7 +84,7 @@ total appears beneath its name. On desktop, a narrow status bar holds
 and last save time; click for storage controls. Editing
 controls for arranging, coloring, finishing, and deleting goals appear in
 **Edit graph** mode; **Finish goal** and **Delete hypertree/subtree**
-follow **Vertex color**. The gear beside Focus opens **Options** directly.
+follow **Vertex color**. The gear at the top of the right column opens **Options** directly.
 **Workspace actions (⋯)** contains export, import, tab
 ordering, and clear-data controls. The same controls serve web and desktop, with
 rows wrapping at narrower widths.

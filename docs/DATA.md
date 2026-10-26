@@ -56,6 +56,34 @@ sessions: []
 focus: null
 ```
 
+Nodes also carry a `vertex` record. It defaults to `{ kind: vanilla }` when absent
+in an existing version-1 workspace. The five supported records are:
+
+```yaml
+vertex: { kind: vanilla }
+vertex: { kind: deadline, deadlineAt: 1792108800000 }
+vertex: { kind: thought }
+vertex: { kind: reading, resource: '/home/me/paper.pdf' }
+vertex:
+  kind: habit
+  frequency: 3
+  interval: week
+  completions: [1792108800000]
+```
+
+Deadline and repetition timestamps are integer Unix milliseconds. Reading
+resources are optional file paths or HTTP(S) addresses; attached files are not
+copied into backups. Relative file paths resolve against the desktop workspace
+directory, and `~/` resolves against the user's home. Habit intervals are `day`,
+`week`, or `month`, with a frequency of 1 to 1000 repetitions. Progress uses the
+current local calendar; weeks begin on Monday. The ordered `completions` history
+supplies the period and lifetime counters and survives frequency edits.
+
+All kinds use the same graph, note, focus, color, and completion fields. Creating
+a vertex assigns just its new coordinates and preserves every existing position.
+Vertices created from the right column have `parentId: null` until explicitly
+connected. The selected vertex does not become their parent.
+
 Session times and focus samples use integer Unix milliseconds. Session `periods`
 must be ordered, nonoverlapping, inside the session span, and sum to `durationMs`.
 The current YAML format permits omitting `periods` for a continuous session whose

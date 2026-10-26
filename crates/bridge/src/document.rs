@@ -37,6 +37,8 @@ pub struct Node {
     pub colors: Option<Vec<String>>,
     #[serde(default)]
     pub multiple_colors: bool,
+    #[serde(default)]
+    pub vertex: crate::vertex::Vertex,
     pub x: f64,
     pub y: f64,
 }
@@ -181,6 +183,7 @@ impl Document {
             safe_number(tree.created_at)?;
         }
         for node in &self.nodes {
+            node.vertex.validate()?;
             if let Some(at) = node.finished_at {
                 safe_number(at)?;
             }
@@ -326,6 +329,7 @@ impl Document {
                 estimate_minutes: node.estimate_ms as f64 / 60000.0,
                 notes: old.map(|old| old.notes.clone()).unwrap_or_default(),
                 notes_file: old.and_then(|old| old.notes_file.clone()),
+                vertex: old.map(|old| old.vertex.clone()).unwrap_or_default(),
                 finished_at: node.finished_at,
                 linked_tree_id: node.linked_tree_id.as_deref().map(text).transpose()?,
                 filled: old.is_none_or(|old| old.filled),

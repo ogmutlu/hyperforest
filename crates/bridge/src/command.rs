@@ -27,11 +27,25 @@ pub enum Action {
         parent_id: String,
         title: String,
         linked_tree_id: Option<String>,
+        #[serde(default)]
+        vertex: crate::vertex::Vertex,
+    },
+    ConfigureVertex {
+        id: String,
+        vertex: crate::vertex::Vertex,
+    },
+    RecordHabit {
+        id: String,
+        #[serde(default)]
+        undo: bool,
     },
     Isolate {
         id: String,
         tree_id: String,
         title: String,
+        linked_tree_id: Option<String>,
+        #[serde(default)]
+        vertex: crate::vertex::Vertex,
     },
     Edit {
         id: String,
@@ -141,7 +155,18 @@ pub fn apply(
     now: u64,
 ) -> Result<Document, String> {
     let mut notes = None;
+    let mut added_vertex = None;
     let command = match action {
+        Action::ConfigureVertex { id, vertex } => {
+            let index = editable(&document, &id)?;
+            document.nodes[index].vertex = document.nodes[index].vertex.configure(vertex)?;
+            return Ok(document);
+        }
+        Action::RecordHabit { id, undo } => {
+            let index = editable(&document, &id)?;
+            document.nodes[index].vertex.record(now, undo)?;
+            return Ok(document);
+        }
         Action::Move { id, x, y } => {
             let index = editable(&document, &id)?;
             if !x.is_finite() || !y.is_finite() {
@@ -178,7 +203,10 @@ pub fn apply(
             parent_id,
             title: name,
             linked_tree_id,
+            vertex,
         } => {
+            vertex.validate_new()?;
+            added_vertex = Some((identity.clone(), parent_id.clone(), vertex));
             let parent = &document.nodes[find_node(&document, &parent_id)?];
             d::Command::Add {
                 id: id(identity),
@@ -192,13 +220,19 @@ pub fn apply(
             id: identity,
             tree_id,
             title: name,
-        } => d::Command::Add {
-            id: id(identity),
-            tree_id: id(tree_id),
-            parent_id: None,
-            title: title(name),
-            linked_tree_id: None,
-        },
+            linked_tree_id,
+            vertex,
+        } => {
+            vertex.validate_new()?;
+            added_vertex = Some((identity.clone(), tree_id.clone(), vertex));
+            d::Command::Add {
+                id: id(identity),
+                tree_id: id(tree_id),
+                parent_id: None,
+                title: title(name),
+                linked_tree_id: linked_tree_id.map(id),
+            }
+        }
         Action::Edit {
             id: identity,
             title: name,
@@ -319,14 +353,6 @@ pub fn apply(
     };
     let imported = matches!(&command, d::Command::ImportSession { .. });
     let old_node_count = document.nodes.len();
-    let arrange_tree = match &command {
-        d::Command::Add {
-            tree_id,
-            parent_id: Some(_),
-            ..
-        } => Some(crate::document::text(tree_id)?),
-        _ => None,
-    };
     let next = state.apply(command, now).map_err(crate::message)?;
     document = document.merge(next.snapshot())?;
     if let Some((id, text)) = notes {
@@ -343,8 +369,10 @@ pub fn apply(
             document = crate::layout::arrange(document, &tree_id)?;
         }
     }
-    if let Some(tree) = arrange_tree {
-        document = crate::layout::arrange(document, &tree)?;
+    if let Some((id, parent_id, vertex)) = added_vertex {
+        let index = find_node(&document, &id)?;
+        document.nodes[index].vertex = vertex;
+        document = crate::vertex::place_new(document, &id, &parent_id)?;
     }
     Ok(document)
 }

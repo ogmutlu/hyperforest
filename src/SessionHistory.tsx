@@ -21,21 +21,25 @@ export function SessionHistory({
   busy,
   selectedNodeId,
   run,
+  persistPreferences = true,
 }: {
   state: State;
   busy: boolean;
   selectedNodeId: string | undefined;
   run: (action: Action) => Promise<boolean>;
+  persistPreferences?: boolean;
 }) {
-  const [range, setRange] = useState(loadHistoryRange);
+  const [range, setRange] = useState(() =>
+    persistPreferences ? loadHistoryRange() : { from: "", to: "" },
+  );
   const { from: historyFrom, to: historyTo } = range;
   const setHistoryFrom = (from: string): void =>
     setRange((range) => ({ ...range, from }));
   const setHistoryTo = (to: string): void =>
     setRange((range) => ({ ...range, to }));
   useEffect(() => {
-    saveHistoryRange(range);
-  }, [range]);
+    if (persistPreferences) saveHistoryRange(range);
+  }, [range, persistPreferences]);
   const [historySubject, setHistorySubject] = useState("");
   const [changingHistory, setChangingHistory] = useState(false);
   const [addingSession, setAddingSession] = useState(false);

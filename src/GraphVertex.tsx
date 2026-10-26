@@ -3,6 +3,8 @@ import type { PointerEvent as ReactPointerEvent } from "react";
 import type { GoalNode } from "./model";
 import { assignedNodeColors, shortTime } from "./presentation";
 import { Icon } from "./icons";
+import { DeadlineTimer, HabitProgress } from "./Clock";
+import { thoughtLines, vertexGeometry } from "./vertices";
 
 interface Props {
   node: GoalNode;
@@ -30,12 +32,17 @@ export const GraphVertex = memo(function GraphVertex({
 }: Props) {
   const colors = assignedNodeColors(node);
   const color = colors[0] ?? "#dfc491";
-  const radius = node.id === treeId ? 24 : 18;
+  const { rx, ry: radius } = vertexGeometry(node);
+  const kind = node.vertex?.kind ?? "vanilla";
+  const thought = kind === "thought";
+  const lines = thought ? thoughtLines(node.title) : [];
+  const outline = `M${-rx},0 C${-rx},${-radius * 1.1} ${rx * 0.85},${-radius * 1.25} ${rx},-3 C${rx * 1.1},${radius * 1.1} ${-rx * 0.85},${radius * 1.15} ${-rx},0 Z`;
   return (
     <g
       transform={`translate(${node.x} ${node.y})`}
       className={`goal ${node.id === treeId ? "root-goal" : ""} ${selected ? "selected" : ""} ${isActive ? "active" : ""} ${node.finishedAt !== undefined ? "finished-ghost" : ""}`}
       data-testid={`node-${node.id}`}
+      data-vertex-kind={kind}
     >
       <g
         role="button"
@@ -66,24 +73,44 @@ export const GraphVertex = memo(function GraphVertex({
             strokeWidth="2"
           />
         )}
-        <circle r={radius + 13} className="node-aura" fill={color} />
-        <circle
-          r={radius + 7}
+        <ellipse
+          rx={rx + 13}
+          ry={radius + 13}
+          className="node-aura"
+          fill={color}
+        />
+        <ellipse
+          rx={rx + 7}
+          ry={radius + 7}
           className="selection-ring"
           stroke={color}
           strokeWidth=".8"
           strokeDasharray="2 5"
           fill="none"
         />
-        <circle
-          r={radius}
-          data-testid={`node-fill-${node.id}`}
-          fill={node.filled ? color : "#101820"}
-          stroke={color}
-          strokeWidth={selected ? "2" : "1.4"}
-        />
+        {thought ? (
+          <path
+            d={outline}
+            className="thought-outline"
+            data-testid={`node-fill-${node.id}`}
+            fill={node.filled ? `${color}18` : "#101820"}
+            stroke={color}
+            strokeWidth={selected ? "2" : "1.4"}
+          />
+        ) : (
+          <circle
+            r={radius}
+            data-testid={`node-fill-${node.id}`}
+            fill={node.filled ? color : "#101820"}
+            stroke={color}
+            strokeWidth={selected ? "2" : "1.4"}
+          />
+        )}
         {colors.length > 1 && (
-          <g data-testid={`node-colors-${node.id}`}>
+          <g
+            data-testid={`node-colors-${node.id}`}
+            transform={thought ? `scale(${rx / radius} 1)` : undefined}
+          >
             {colors.map((segment, index) => {
               const start =
                 -Math.PI / 2 + (index * 2 * Math.PI) / colors.length;
@@ -95,11 +122,11 @@ export const GraphVertex = memo(function GraphVertex({
                   key={segment}
                   data-color={segment}
                   d={
-                    node.filled
+                    node.filled && !thought
                       ? `M0,0 L${radius * Math.cos(start)},${radius * Math.sin(start)} ${arc.slice(arc.indexOf(" A") + 1)} Z`
                       : arc
                   }
-                  fill={node.filled ? segment : "none"}
+                  fill={node.filled && !thought ? segment : "none"}
                   stroke={segment}
                   strokeWidth={selected ? "2" : "1.4"}
                 />
@@ -107,17 +134,28 @@ export const GraphVertex = memo(function GraphVertex({
             })}
           </g>
         )}
-        <circle
-          className="node-detail"
-          r={radius - 7}
-          fill="none"
-          stroke={color}
-          opacity=".16"
-          strokeWidth=".7"
-        />
+        {!thought && (
+          <circle
+            className="node-detail"
+            r={radius - 7}
+            fill="none"
+            stroke={color}
+            opacity=".16"
+            strokeWidth=".7"
+          />
+        )}
+        {!thought && kind !== "vanilla" && (
+          <g
+            transform="translate(-9 -9)"
+            style={{ color: node.filled ? "#101820" : color }}
+            pointerEvents="none"
+          >
+            <Icon name={kind} size={18} />
+          </g>
+        )}
         {node.notes.trim().length > 0 && (
           <g
-            transform={`translate(${radius - 2} ${-radius - 10})`}
+            transform={`translate(${rx - 2} ${-radius - 10})`}
             className="node-note-indicator"
             role="img"
             aria-label="Has notes"
@@ -131,19 +169,41 @@ export const GraphVertex = memo(function GraphVertex({
           </g>
         )}
         <text
-          y={radius + 23}
+          y={thought ? -(lines.length - 1) * 11 : radius + 23}
           textAnchor="middle"
           className="node-title"
           fill="#ffffff"
         >
-          {node.title.length > 23 ? `${node.title.slice(0, 22)}…` : node.title}
+          {thought
+            ? lines.map((line, index) => (
+                <tspan key={index} x="0" dy={index === 0 ? ".35em" : "22"}>
+                  {line}
+                </tspan>
+              ))
+            : node.title.length > 23
+              ? `${node.title.slice(0, 22)}…`
+              : node.title}
         </text>
-        <text y={radius + 40} textAnchor="middle" className="node-time">
+        <text
+          y={radius + (thought ? 22 : 40)}
+          textAnchor="middle"
+          className="node-time"
+        >
           {shortTime(elapsed)}
           {node.estimateMinutes
             ? ` / ${shortTime(node.estimateMinutes * 60000)}`
             : " focused"}
         </text>
+        {node.vertex?.kind === "deadline" && (
+          <text y={radius + 60} textAnchor="middle" className="node-deadline">
+            <DeadlineTimer deadlineAt={node.vertex.deadlineAt} />
+          </text>
+        )}
+        {node.vertex?.kind === "habit" && (
+          <text y={radius + 60} textAnchor="middle" className="node-habit">
+            <HabitProgress vertex={node.vertex} />
+          </text>
+        )}
       </g>
       {editing &&
         node.finishedAt === undefined &&

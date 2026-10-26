@@ -2,6 +2,7 @@
 mod command;
 mod document;
 mod layout;
+mod vertex;
 
 use document::{millis, Document};
 use hyperforest_domain as d;

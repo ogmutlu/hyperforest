@@ -2,6 +2,7 @@ mod archive;
 #[cfg(feature = "benchmark")]
 mod benchmark;
 mod hiper;
+mod resource;
 mod store;
 mod tray;
 use archive::{desktop_export_archive, desktop_import_archive};
@@ -104,6 +105,27 @@ async fn desktop_open_note(
     }
     let mut child = std::process::Command::new("xdg-open")
         .arg(path)
+        .spawn()
+        .map_err(|error| error.to_string())?;
+    std::thread::spawn(move || {
+        let _ = child.wait();
+    });
+    Ok(())
+}
+#[tauri::command]
+async fn desktop_open_resource(resource: String, state: State<'_, Desktop>) -> Result<(), String> {
+    let directory = state
+        .store
+        .lock()
+        .map_err(|error| error.to_string())?
+        .as_ref()
+        .ok_or("Choose a directory first.")?
+        .directory
+        .clone();
+    let home = std::env::var_os("HOME").map(PathBuf::from);
+    let target = resource::resolve(&resource, &directory, home.as_deref())?;
+    let mut child = std::process::Command::new("xdg-open")
+        .arg(target)
         .spawn()
         .map_err(|error| error.to_string())?;
     std::thread::spawn(move || {
@@ -223,6 +245,7 @@ fn main() {
             desktop_save,
             desktop_pending_sessions,
             desktop_open_note,
+            desktop_open_resource,
             desktop_enable_backups,
             benchmark::desktop_benchmark_result
         ]);
@@ -238,6 +261,7 @@ fn main() {
         desktop_save,
         desktop_pending_sessions,
         desktop_open_note,
+        desktop_open_resource,
         desktop_enable_backups
     ]);
     builder

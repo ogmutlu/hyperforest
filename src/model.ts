@@ -6,6 +6,18 @@ export interface GoalTree {
   pedantic: boolean;
   showFinished: boolean;
 }
+export type HabitInterval = "day" | "week" | "month";
+export type VertexSettings =
+  | { kind: "vanilla" }
+  | { kind: "deadline"; deadlineAt: number }
+  | { kind: "thought" }
+  | { kind: "reading"; resource: string }
+  | { kind: "habit"; frequency: number; interval: HabitInterval };
+export type VertexKind = VertexSettings["kind"];
+export type Vertex =
+  | Exclude<VertexSettings, { kind: "habit" }>
+  | (Extract<VertexSettings, { kind: "habit" }> & { completions: number[] });
+
 export interface GoalNode {
   id: string;
   treeId: string;
@@ -20,6 +32,8 @@ export interface GoalNode {
   color: string;
   colors?: string[];
   multipleColors: boolean;
+  /** Missing in older workspaces; Rust normalizes it to vanilla. */
+  vertex?: Vertex;
   x: number;
   y: number;
 }
@@ -63,7 +77,14 @@ export type Action =
   | { type: "pedantic"; treeId: string; enabled: boolean }
   | { type: "create"; id: string; title: string }
   | { type: "reorderTree"; id: string; direction: -1 | 1 }
-  | { type: "isolate"; id: string; treeId: string; title: string }
+  | {
+      type: "isolate";
+      id: string;
+      treeId: string;
+      title: string;
+      linkedTreeId?: string;
+      vertex?: VertexSettings;
+    }
   | { type: "color"; id: string; color: string | null }
   | { type: "colors"; id: string; colors: string[] }
   | { type: "multipleColors"; id: string; enabled: boolean }
@@ -74,7 +95,10 @@ export type Action =
       parentId: string;
       title: string;
       linkedTreeId?: string;
+      vertex?: VertexSettings;
     }
+  | { type: "configureVertex"; id: string; vertex: VertexSettings }
+  | { type: "recordHabit"; id: string; undo?: boolean }
   | {
       type: "edit";
       expected?: Pick<GoalNode, "title" | "notes" | "estimateMinutes">;

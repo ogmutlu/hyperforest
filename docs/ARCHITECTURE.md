@@ -60,6 +60,16 @@ notes, notes filenames, coordinates, fill, and finished-vertex visibility.
 `command.rs` separates business commands from presentation edits. For example,
 reparenting goes into the domain; moving a vertex only updates coordinates.
 Layout uses floating-point geometry in `layout.rs`, outside the domain.
+`vertex.rs` validates the five vertex kinds and retains deadline timestamps,
+reading attachment paths/URLs, and habit frequency and timestamped repetitions.
+These metadata and counter operations remain outside the proof domain; every kind
+uses the same domain operations for graph structure, focus, colors, and completion.
+Configuration edits preserve the existing habit history. Creation finds a free
+position for just the new node; only an explicit layout command rearranges it.
+The creation menu uses the isolated-node command for every kind, with no implicit
+parent. Users connect vertices later through the ordinary domain command.
+Pedantic mode still rejects disconnected graphs; creation explains that it must
+be off before adding isolated vertices.
 Unicode, decimal minutes, JSON schema decoding, and error messages also live here.
 
 The WASM `Domain` handle is immutable. TypeScript caches a handle in a `WeakMap`
@@ -84,6 +94,14 @@ snapshot is published. Conflicts and disk failures are surfaced to the interface
 ## Rendering
 
 - `App.tsx` coordinates selection, dialogs, and commands.
+- `Tutorial.tsx` runs an action-driven walkthrough using the real `App` and
+  Rust-backed `Workspace` commands with an in-memory storage adapter. Successful
+  commands advance tasks; history input/click events advance the filter tasks.
+  The real workspace is inert during practice, with any native dialogs temporarily
+  suspended and restored on exit. The coach is portaled into active practice
+  dialogs so it remains accessible above the browser's modal backdrop. No practice
+  workspace or history-filter preference is persisted. `TutorialContext.tsx`
+  supplies the replay button shared by both hosts without a circular App import.
 - `SessionHistory.tsx` owns the history filters, manual-edit forms, and a compact
   table paginated at 100 rows. The modal locks background scrolling and bounds
   its own scroll area. Statistics are queried only while history is open.
@@ -120,6 +138,13 @@ snapshot is published. Conflicts and disk failures are surfaced to the interface
 - `useFrameState.ts` coalesces pointer samples into one update per animation frame.
   Its ref retains the final sample even if pointer-up precedes the next frame.
 - `Clock.tsx` confines clock subscriptions to the text displaying time.
+- `VertexFields.tsx` shares type-specific inputs between creation and settings.
+  `VertexDetails.tsx` shows countdowns, reading attachments, and habit counters.
+  `vertices.ts` supplies symbols, text-sized thought geometry, and local calendar
+  grouping of habit repetitions; weeks start on Monday. Countdown/progress clocks
+  update their own text without rerendering the whole graph.
+- `src-tauri/src/resource.rs` resolves reading paths against the workspace or home
+  directory and validates website URLs before opening the system viewer.
 - `tray.ts` serializes native menu actions and status updates. The native
   `src-tauri/src/tray.rs` renders activity badges and menu labels; it owns no
   accounting rules. Pause, resume, and save still use the same domain commands.

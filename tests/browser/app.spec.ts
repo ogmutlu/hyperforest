@@ -130,7 +130,7 @@ test.beforeEach(async ({ page }) => {
 });
 
 for (const desktop of [false, true]) {
-  test(`creates vertices without edit mode and marks nonblank notes (${desktop ? "desktop" : "web"})`, async ({
+  test(`creation enters edit mode and marks nonblank notes (${desktop ? "desktop" : "web"})`, async ({
     page,
   }) => {
     if (desktop) await installDesktopMock(page);
@@ -148,23 +148,28 @@ for (const desktop of [false, true]) {
         .getByRole("button", { name: "Create hypertree", exact: true })
         .click();
     }
-    const add = page.getByRole("button", { name: "New vertex", exact: true });
+    const add = page.getByRole("button", {
+      name: "Create vanilla vertex",
+      exact: true,
+    });
     await expect(add).toBeVisible();
     await add.click();
-    const parentId = await page
-      .getByLabel("Parent vertex", { exact: true })
-      .inputValue();
+    await expect(page.getByLabel("Parent vertex", { exact: true })).toHaveCount(
+      0,
+    );
     await page.getByLabel("Goal name", { exact: true }).fill("Quick goal");
-    await page.getByRole("button", { name: "Add vertex", exact: true }).click();
+    await page
+      .getByRole("button", { name: "Create vertex", exact: true })
+      .click();
     await expect(page.locator(".inspector h2")).toHaveText("Quick goal");
     await expect(page.locator(".inspector")).toHaveAttribute(
       "data-editing",
-      "false",
+      "true",
     );
     await add.click();
-    await expect(
-      page.getByLabel("Parent vertex", { exact: true }),
-    ).not.toHaveValue(parentId);
+    await expect(page.getByLabel("Parent vertex", { exact: true })).toHaveCount(
+      0,
+    );
     await page.keyboard.press("Escape");
     const vertex = page.locator(".goal").filter({
       has: page.getByRole("button", { name: "Select Quick goal", exact: true }),
@@ -446,12 +451,16 @@ test("hyperforest supports isolated colored vertices, notes and a full-width can
   await page.goto("./");
   await expect(page).toHaveTitle(/hyperforest/);
   await expect(
-    page.getByRole("button", { name: "New vertex", exact: true }),
+    page.getByRole("button", { name: "Create vanilla vertex", exact: true }),
   ).toBeVisible();
   await page.getByRole("button", { name: "Edit graph", exact: true }).click();
-  await page.getByRole("button", { name: "New vertex", exact: true }).click();
+  await page
+    .getByRole("button", { name: "Create vanilla vertex", exact: true })
+    .click();
   await page.getByLabel("Goal name", { exact: true }).fill("Independent");
-  await page.getByRole("button", { name: "Add vertex", exact: true }).click();
+  await page
+    .getByRole("button", { name: "Create vertex", exact: true })
+    .click();
   await expect(page.locator(".inspector h2")).toHaveText("Independent");
   const independentId = await page.evaluate(
     () =>
@@ -580,9 +589,13 @@ test("edit toggle gates dragging, reconnecting, disconnecting and node plus butt
   await page
     .getByRole("button", { name: "Select Read & wonder", exact: true })
     .click();
-  await page.getByRole("button", { name: "New vertex", exact: true }).click();
+  await page
+    .getByRole("button", { name: "Create vanilla vertex", exact: true })
+    .click();
   await page.getByLabel("Goal name", { exact: true }).fill("A small step");
-  await page.getByRole("button", { name: "Add vertex", exact: true }).click();
+  await page
+    .getByRole("button", { name: "Create vertex", exact: true })
+    .click();
   await expect(page.locator(".inspector h2")).toHaveText("A small step");
   await page.getByRole("button", { name: "Done editing", exact: true }).click();
   await expect(page.getByTestId("edge-handle-read")).toHaveCount(0);
@@ -699,9 +712,13 @@ test("finishing preserves a child as a ghost, frees its name, and retains parent
     .getByRole("button", { name: "Select Discover", exact: true })
     .click();
   await page.getByRole("button", { name: "Edit graph", exact: true }).click();
-  await page.getByRole("button", { name: "New vertex", exact: true }).click();
+  await page
+    .getByRole("button", { name: "Create vanilla vertex", exact: true })
+    .click();
   await page.getByLabel("Goal name", { exact: true }).fill("Read & wonder");
-  await page.getByRole("button", { name: "Add vertex", exact: true }).click();
+  await page
+    .getByRole("button", { name: "Create vertex", exact: true })
+    .click();
   await expect(page.getByRole("dialog")).toHaveCount(0);
   await expect(
     page.getByRole("button", { name: "Select Read & wonder", exact: true }),
@@ -819,9 +836,13 @@ test("creates trees and children, edits markdown, and restores them on reload", 
     "true",
   );
   await page.getByRole("button", { name: "Edit graph", exact: true }).click();
-  await page.getByRole("button", { name: "New vertex", exact: true }).click();
+  await page
+    .getByRole("button", { name: "Create vanilla vertex", exact: true })
+    .click();
   await page.getByLabel("Goal name", { exact: true }).fill("Research");
-  await page.getByRole("button", { name: "Add vertex", exact: true }).click();
+  await page
+    .getByRole("button", { name: "Create vertex", exact: true })
+    .click();
   await expect(page.locator(".inspector h2")).toHaveText("Research");
   await page.getByRole("button", { name: "Edit goal", exact: true }).click();
   await page
@@ -860,21 +881,32 @@ test("fits on mobile without horizontal overflow", async ({ page }) => {
   await expect(page.locator(".focus-dock")).toBeVisible();
 });
 
-test("duplicate children show a visible error without changing saved data", async ({
+test("duplicate isolated vertices show a visible error without changing saved data", async ({
   page,
 }) => {
   await page.goto("./");
   await page.getByRole("button", { name: "Edit graph", exact: true }).click();
-  await page.getByRole("button", { name: "New vertex", exact: true }).click();
-  await page.getByLabel("Goal name", { exact: true }).fill("Discover");
-  await page.getByRole("button", { name: "Add vertex", exact: true }).click();
-  const dialog = page.getByRole("dialog", { name: "Add child goal" });
+  await page
+    .getByRole("button", { name: "Create vanilla vertex", exact: true })
+    .click();
+  await page.getByLabel("Goal name", { exact: true }).fill("Independent");
+  await page
+    .getByRole("button", { name: "Create vertex", exact: true })
+    .click();
+  await page
+    .getByRole("button", { name: "Create vanilla vertex", exact: true })
+    .click();
+  await page.getByLabel("Goal name", { exact: true }).fill("Independent");
+  await page
+    .getByRole("button", { name: "Create vertex", exact: true })
+    .click();
+  const dialog = page.getByRole("dialog", { name: "Create vanilla vertex" });
   await expect(dialog.getByRole("alert")).toContainText(
     "Sibling names must be unique",
   );
   await page.getByRole("button", { name: "Close dialog" }).click();
   await expect(page.getByRole("tab", { name: /Test project/ })).toContainText(
-    "9",
+    "10",
   );
 });
 
@@ -1084,12 +1116,16 @@ test("adds another hypertree as a persistent live vertex", async ({ page }) => {
     .getByRole("button", { name: "Create hypertree", exact: true })
     .click();
   await page.getByRole("button", { name: "Edit graph", exact: true }).click();
-  await page.getByRole("button", { name: "New vertex", exact: true }).click();
-  await page.getByLabel("Vertex type").selectOption("project");
+  await page
+    .getByRole("button", { name: "Create vanilla vertex", exact: true })
+    .click();
+  await page.getByLabel("Link another hypertree").selectOption("project");
   await expect(page.getByLabel("Goal name", { exact: true })).toHaveValue(
     "Test project",
   );
-  await page.getByRole("button", { name: "Add vertex", exact: true }).click();
+  await page
+    .getByRole("button", { name: "Create vertex", exact: true })
+    .click();
   await expect(page.locator(".inspector h2")).toHaveText("Test project");
   await page.reload();
   await page.getByRole("tab", { name: /Linked project/ }).click();
@@ -1133,9 +1169,13 @@ test("reorders tabs and routes linked focus to its source root", async ({
   await expect(page.getByRole("tab").first()).toContainText("Container");
   await page.getByRole("tab", { name: /Container/ }).click();
   await page.getByRole("button", { name: "Edit graph", exact: true }).click();
-  await page.getByRole("button", { name: "New vertex", exact: true }).click();
-  await page.getByLabel("Vertex type").selectOption("project");
-  await page.getByRole("button", { name: "Add vertex", exact: true }).click();
+  await page
+    .getByRole("button", { name: "Create vanilla vertex", exact: true })
+    .click();
+  await page.getByLabel("Link another hypertree").selectOption("project");
+  await page
+    .getByRole("button", { name: "Create vertex", exact: true })
+    .click();
   await page.getByRole("button", { name: "Focus", exact: true }).click();
   await expect
     .poll(() =>
@@ -1303,7 +1343,7 @@ test("change history adds a persistent session and confirms deletion", async ({
   await expect(page.locator(".today-counter")).toHaveText("0h 0m");
 });
 
-test("new vertex chooses a parent in its dialog and submits with Add vertex", async ({
+test("vanilla creation starts isolated and can be connected later", async ({
   page,
 }) => {
   await page.goto("./");
@@ -1312,26 +1352,32 @@ test("new vertex chooses a parent in its dialog and submits with Add vertex", as
   await expect(
     page.getByRole("switch", { name: "pedantic", exact: true }),
   ).toHaveCount(0);
-  await page.getByRole("button", { name: "New vertex", exact: true }).click();
-  await expect(page.getByLabel("Parent vertex", { exact: true })).toHaveValue(
-    "project",
-  );
   await page
-    .getByLabel("Parent vertex", { exact: true })
-    .selectOption("discover");
-  await page.getByLabel("Goal name", { exact: true }).fill("Chosen parent");
-  await page.getByRole("button", { name: "Add vertex", exact: true }).click();
+    .getByRole("button", { name: "Create vanilla vertex", exact: true })
+    .click();
+  await expect(page.getByLabel("Parent vertex", { exact: true })).toHaveCount(
+    0,
+  );
+  await page.getByLabel("Goal name", { exact: true }).fill("Independent");
+  await page
+    .getByRole("button", { name: "Create vertex", exact: true })
+    .click();
   await expect(page.getByRole("dialog")).toHaveCount(0);
   const id = await page.evaluate(
     () =>
       JSON.parse(localStorage.getItem("hyperforest.workspace.v1")!).nodes.find(
-        (node: { title: string }) => node.title === "Chosen parent",
+        (node: { title: string }) => node.title === "Independent",
       ).id,
   );
-  expect(await parentOf(page, id)).toBe("discover");
-  await page.getByRole("button", { name: "New vertex", exact: true }).click();
-  await expect(page.getByLabel("Parent vertex", { exact: true })).toHaveValue(
-    id,
+  expect(await parentOf(page, id)).toBeNull();
+  await expect(page.getByTestId(`edge-${id}`)).toHaveCount(0);
+  await reconnect(page, id, "discover");
+  await expect.poll(() => parentOf(page, id)).toBe("discover");
+  await page
+    .getByRole("button", { name: "Create vanilla vertex", exact: true })
+    .click();
+  await expect(page.getByLabel("Parent vertex", { exact: true })).toHaveCount(
+    0,
   );
 });
 

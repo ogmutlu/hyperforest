@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState, useRef } from "react";
 import { connectTray } from "./tray";
 import { App } from "./App";
-import { TutorialButton } from "./Tutorial";
+import { TutorialButton } from "./TutorialContext";
 import { DesktopSaveStatus } from "./DesktopSaveStatus";
 import { chooseDesktop, loadDesktop } from "./desktop";
 import type { DesktopWorkspace } from "./desktop";

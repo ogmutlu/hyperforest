@@ -2,9 +2,10 @@
 import { useEffect, useState } from "react";
 import { focusElapsed, todayTime } from "./domainClient";
 import { formatTime } from "./presentation";
-import type { Focus, State } from "./model";
+import type { Focus, State, Vertex } from "./model";
+import { habitProgress } from "./vertices";
 
-function useNow(interval: number | null, revision: object): number {
+function useNow(interval: number | null, revision: object | number): number {
   const [now, setNow] = useState(Date.now);
   useEffect(() => {
     setNow(Date.now());
@@ -13,6 +14,32 @@ function useNow(interval: number | null, revision: object): number {
     return () => clearInterval(timer);
   }, [interval, revision]);
   return now;
+}
+export function DeadlineTimer({ deadlineAt }: { deadlineAt: number }) {
+  const now = useNow(1000, deadlineAt);
+  const remaining = deadlineAt - now;
+  const absolute = Math.abs(remaining);
+  const days = Math.floor(absolute / 86400000);
+  return (
+    <>
+      {remaining < 0 ? "Overdue by " : ""}
+      {days ? `${days}d ` : ""}
+      {formatTime(absolute % 86400000)}
+      {remaining >= 0 ? " left" : ""}
+    </>
+  );
+}
+export function HabitProgress({
+  vertex,
+}: {
+  vertex: Extract<Vertex, { kind: "habit" }>;
+}) {
+  const now = useNow(10000, vertex);
+  return (
+    <>
+      {habitProgress(vertex, now)} / {vertex.frequency} this {vertex.interval}
+    </>
+  );
 }
 export function FocusTimer({ focus }: { focus: Focus }) {
   const now = useNow(focus.runningSince === null ? null : 1000, focus);

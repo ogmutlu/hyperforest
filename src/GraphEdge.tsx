@@ -2,6 +2,7 @@ import { memo } from "react";
 import type { PointerEvent as ReactPointerEvent } from "react";
 import type { GoalNode } from "./model";
 import { assignedNodeColor } from "./presentation";
+import { vertexGeometry } from "./vertices";
 
 interface Props {
   node: GoalNode;
@@ -13,12 +14,11 @@ interface Props {
 export const GraphEdge = memo(function GraphEdge({
   node,
   parent,
-  treeId,
   editing,
   linkDown,
 }: Props) {
   const color = assignedNodeColor(node);
-  const d = `M${parent.x},${parent.y + (parent.id === treeId ? 24 : 18)} C${parent.x},${(parent.y + node.y) / 2} ${node.x},${(parent.y + node.y) / 2} ${node.x},${node.y - (node.id === treeId ? 24 : 18)}`;
+  const d = `M${parent.x},${parent.y + vertexGeometry(parent).ry} C${parent.x},${(parent.y + node.y) / 2} ${node.x},${(parent.y + node.y) / 2} ${node.x},${node.y - vertexGeometry(node).ry}`;
   return (
     <g
       className={node.finishedAt !== undefined ? "edge finished-edge" : "edge"}

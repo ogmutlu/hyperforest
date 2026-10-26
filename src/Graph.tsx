@@ -5,6 +5,7 @@ import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { PointerEvent as ReactPointerEvent } from "react";
 import type { Action, GoalNode, State } from "./model";
 import { Icon } from "./icons";
+import { vertexGeometry } from "./vertices";
 
 interface Props {
   editing: boolean;
@@ -85,7 +86,7 @@ export const Graph = memo(function Graph({
       setCamera((previous) => ({
         ...previous,
         scale: Math.max(
-          0.55,
+          0.04,
           Math.min(2.5, previous.scale - event.deltaY * 0.001),
         ),
       }));
@@ -136,6 +137,31 @@ export const Graph = memo(function Graph({
     return matrix
       ? new DOMPoint(x, y).matrixTransform(matrix.inverse())
       : new DOMPoint(x, y);
+  };
+  const fitAll = (): void => {
+    const rect = svg.current?.getBoundingClientRect();
+    if (!rect) return;
+    const viewportStart = coordinate(rect.left, rect.top);
+    const viewportEnd = coordinate(rect.right, rect.bottom);
+    let left = 0,
+      top = 0,
+      right = 1100,
+      bottom = 720;
+    for (const node of nodes) {
+      const { rx, ry } = vertexGeometry(node);
+      left = Math.min(left, node.x - Math.max(rx, 100) - 24);
+      right = Math.max(right, node.x + Math.max(rx, 100) + 24);
+      top = Math.min(top, node.y - ry - 24);
+      bottom = Math.max(bottom, node.y + ry + 90);
+    }
+    const width = viewportEnd.x - viewportStart.x;
+    const height = viewportEnd.y - viewportStart.y;
+    const scale = Math.min(1, width / (right - left), height / (bottom - top));
+    setCamera({
+      x: viewportStart.x + (width - (right - left) * scale) / 2 - left * scale,
+      y: viewportStart.y + (height - (bottom - top) * scale) / 2 - top * scale,
+      scale,
+    });
   };
   const down = useCallback(
     (event: ReactPointerEvent<SVGElement>, node?: GoalNode): void => {
@@ -220,11 +246,15 @@ export const Graph = memo(function Graph({
     const link = flushLink();
     const position = flushPosition();
     if (link) {
-      const target = nodes.find(
-        (node) =>
+      const target = nodes.find((node) => {
+        const { rx, ry } = vertexGeometry(node);
+        return (
           node.finishedAt === undefined &&
-          Math.hypot(node.x - link.x, node.y - link.y) <= 48,
-      );
+          ((node.x - link.x) / Math.max(48, rx)) ** 2 +
+            ((node.y - link.y) / Math.max(48, ry)) ** 2 <=
+            1
+        );
+      });
       setLink(null);
       await run({ type: "connect", id: link.id, parentId: target?.id ?? null });
       return;
@@ -324,7 +354,7 @@ export const Graph = memo(function Graph({
           onClick={() =>
             setCamera((previous) => ({
               ...previous,
-              scale: Math.max(0.55, previous.scale - 0.15),
+              scale: Math.max(0.04, previous.scale - 0.15),
             }))
           }
         >
@@ -342,11 +372,7 @@ export const Graph = memo(function Graph({
         >
           +
         </button>
-        <button
-          className="icon-button"
-          aria-label="Fit graph"
-          onClick={() => setCamera(fitCamera(compact))}
-        >
+        <button className="icon-button" aria-label="Fit graph" onClick={fitAll}>
           <Icon name="fit" />
         </button>
         <button

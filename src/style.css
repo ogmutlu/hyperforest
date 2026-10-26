@@ -180,8 +180,138 @@ h2 {
 }
 .map-panel {
   position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 60px;
   border-bottom: 1px solid var(--line);
   min-width: 0;
+}
+.graph-tools {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 24px 8px;
+  border-left: 1px solid var(--line);
+  background: #121b24;
+}
+.graph-tool-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.graph-tools-separator {
+  width: 30px;
+  margin: 16px 0;
+  border: 0;
+  border-top: 1px solid var(--line);
+}
+.graph-tool-button {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 42px;
+  height: 44px;
+  padding: 0;
+  color: #a8b8c3;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 8px;
+}
+.graph-tool-button:hover,
+.graph-tool-button:focus-visible,
+.graph-tool-button[aria-pressed="true"] {
+  color: var(--gold);
+  border-color: #dfc49144;
+  background: #dfc4910b;
+}
+.graph-tool-tooltip {
+  position: absolute;
+  z-index: 10;
+  right: calc(100% + 10px);
+  padding: 8px 12px;
+  border: 1px solid #44515c;
+  border-radius: 6px;
+  background: #18242f;
+  color: #e8e9e4;
+  font-size: 12px;
+  white-space: nowrap;
+  box-shadow: 0 6px 24px #0005;
+  pointer-events: none;
+  visibility: hidden;
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+.graph-tool-button:hover .graph-tool-tooltip,
+.graph-tool-button:focus-visible .graph-tool-tooltip {
+  visibility: visible;
+  opacity: 1;
+}
+.creation-hint {
+  margin: 16px 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.6;
+}
+.vertex-details {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+  color: var(--node-color);
+  font-size: 12px;
+}
+.vertex-details > svg {
+  flex-shrink: 0;
+}
+.vertex-details .quiet-button {
+  min-height: 32px;
+  padding: 6px 8px;
+  text-decoration: none;
+}
+.vertex-detail-muted {
+  color: var(--muted);
+  font-size: 11px;
+}
+.vertex-configure {
+  margin-left: auto;
+}
+.reading-resource {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: min(600px, 100%);
+}
+.habit-frequency-fields {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+.reading-attachment-field {
+  margin-bottom: 20px;
+}
+.reading-attachment-field label {
+  margin-bottom: 8px;
+}
+.deadline-countdown,
+.habit-progress {
+  font-variant-numeric: tabular-nums;
+}
+.node-deadline,
+.node-habit {
+  font-family: Inter, "Segoe UI", sans-serif;
+  fill: #c4bdab;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+.thought-outline {
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.goal[data-vertex-kind="thought"] .node-title {
+  font-size: 17px;
+  font-style: italic;
 }
 .graph {
   position: relative;
@@ -333,86 +463,179 @@ h2 {
   background: #060c15bb;
   backdrop-filter: blur(7px);
 }
-.tutorial-dialog {
-  width: min(580px, calc(100vw - 32px));
-}
-.tutorial-dialog[open] {
+.tutorial-shell {
+  position: fixed;
+  z-index: 200;
+  inset: 0;
   display: flex;
   flex-direction: column;
+  background: #0b1017;
 }
-.tutorial-dialog > :not(.tutorial-lesson) {
-  flex-shrink: 0;
-}
-.tutorial-lesson {
-  min-height: 0;
-  overflow-y: auto;
-}
-.tutorial-illustration {
-  position: relative;
-  height: 110px;
-  margin: 22px 0;
-  color: var(--gold);
-  background: radial-gradient(ellipse, #dfc4910c, transparent 70%);
-}
-.tutorial-illustration > svg {
-  width: 100%;
-  height: 100%;
-  stroke: #786e56;
-  stroke-width: 1.5;
-}
-.tutorial-illustration circle {
-  fill: #1e292e;
-  stroke: var(--gold);
-}
-.tutorial-illustration > span {
-  position: absolute;
-  inset: 0;
-  display: grid;
-  place-items: center;
-}
-.tutorial-lesson h2 {
-  margin: 10px 0 18px;
-}
-.tutorial-lesson h2:focus {
-  outline: none;
-}
-.tutorial-lesson .tutorial-tip {
-  margin-top: 16px;
-  padding: 14px 16px;
-  border-left: 2px solid #8c7b5a;
-  background: #dfc49108;
-  color: #c8d1d3;
-}
-.tutorial-progress {
-  display: flex;
-  justify-content: center;
-  margin-top: 18px;
-}
-.tutorial-progress button {
-  min-width: 30px;
-  min-height: 34px;
-  border: 0;
-  background: transparent;
-}
-.tutorial-progress span {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: #46545f;
-}
-.tutorial-progress [aria-current="step"] span {
-  background: var(--gold);
-}
-.tutorial-actions,
-.tutorial-actions > div {
+.tutorial-shell-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  flex-shrink: 0;
+  gap: 16px;
+  padding: 12px 24px;
+  border-bottom: 1px solid var(--line);
+  background: #15212c;
+}
+.tutorial-shell-header > span {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  color: var(--gold);
+  font-size: 14px;
+}
+.tutorial-shell-header small {
+  color: var(--muted);
+  font-size: 11px;
+}
+.tutorial-welcome {
+  width: min(580px, 100%);
+  margin: auto;
+  padding: 32px;
+  overflow: auto;
+}
+.tutorial-welcome > svg {
+  display: block;
+  margin-bottom: 28px;
+  color: var(--gold);
+}
+.tutorial-welcome h1 {
+  font-size: clamp(30px, 4vw, 46px);
+  margin: 12px 0 24px;
+}
+.tutorial-welcome p {
+  font-size: 14px;
+  line-height: 1.7;
+  margin-bottom: 24px;
+}
+.tutorial-shell-body {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 310px;
+}
+.tutorial-workspace {
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+.tutorial-workspace main {
+  padding: 0 24px;
+}
+.tutorial-coach-sidebar {
+  overflow: auto;
+  padding: 24px 20px;
+  border-left: 1px solid var(--line);
+  background: #111b25;
+}
+.tutorial-coach h2,
+.dialog .tutorial-coach h2 {
+  font:
+    500 22px/1.3 Inter,
+    "Segoe UI",
+    sans-serif;
+  margin: 10px 0 16px;
+  letter-spacing: -0.4px;
+}
+.tutorial-coach p,
+.dialog .tutorial-coach p {
+  font-size: 13px;
+  line-height: 1.6;
+  margin: 12px 0;
+}
+.tutorial-hint {
+  color: var(--muted);
+}
+.tutorial-coach progress {
+  width: 100%;
+  height: 5px;
+  accent-color: var(--gold);
+  margin: 10px 0;
+}
+.tutorial-coach-actions {
+  display: flex;
+  align-items: center;
   flex-wrap: wrap;
   gap: 8px;
 }
-.tutorial-actions {
-  margin-top: 14px;
+.tutorial-coach-actions button {
+  font-size: 11px;
+}
+.tutorial-coach-slot {
+  flex-shrink: 0;
+  margin-bottom: 20px;
+  padding: 16px;
+  border: 1px solid #dfc49155;
+  border-radius: 8px;
+  background: #17232d;
+}
+.tutorial-coach-in-dialog .tutorial-hint,
+.tutorial-coach-in-dialog progress,
+.tutorial-form-hint {
+  display: none;
+}
+.focus-screen .tutorial-coach-slot {
+  position: absolute;
+  z-index: 1;
+  left: 24px;
+  top: 60px;
+  width: min(400px, calc(100% - 48px));
+  text-align: left;
+}
+.tutorial-target {
+  outline: 2px solid var(--gold) !important;
+  outline-offset: 5px;
+  filter: drop-shadow(0 0 5px #dfc49155);
+}
+@media (max-width: 850px) {
+  .tutorial-shell-body {
+    display: flex;
+    flex-direction: column-reverse;
+  }
+  .tutorial-workspace {
+    flex: 1;
+  }
+  .tutorial-coach-sidebar {
+    flex-shrink: 0;
+    max-height: 220px;
+    border-left: 0;
+    border-bottom: 1px solid var(--line);
+    padding: 14px 18px;
+  }
+  .tutorial-coach-sidebar:empty {
+    display: none;
+  }
+  .tutorial-coach h2,
+  .dialog .tutorial-coach h2 {
+    font-size: 18px;
+    margin: 6px 0;
+  }
+  .tutorial-coach-sidebar .tutorial-hint {
+    display: none;
+  }
+  .tutorial-coach p,
+  .dialog .tutorial-coach p {
+    margin: 8px 0;
+    font-size: 12px;
+  }
+  .tutorial-shell-header {
+    padding: 8px 16px;
+  }
+  .tutorial-shell-header small {
+    flex-basis: 100%;
+  }
+  .tutorial-workspace main {
+    padding: 0 16px;
+  }
+  .focus-screen:has(.tutorial-coach-slot) .focus-content {
+    padding-top: 180px;
+  }
 }
 .dialog h2 {
   font-size: 31px;
@@ -606,14 +829,6 @@ form > .primary-button {
   }
   .dialog h2 {
     font-size: 28px;
-  }
-  .tutorial-illustration {
-    height: 70px;
-    margin: 12px 0;
-  }
-  .tutorial-dialog .tutorial-tip {
-    padding: 10px 12px;
-    margin-top: 12px;
   }
 }
 @media (prefers-reduced-motion: reduce) {

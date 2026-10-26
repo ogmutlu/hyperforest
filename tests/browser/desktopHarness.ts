@@ -52,6 +52,8 @@ export async function installDesktopMock(
             running?: boolean;
             paused?: boolean;
             contents?: number[];
+            resource?: string;
+            options?: { directory?: boolean };
           },
         ) => {
           const key = "test.desktop.files";
@@ -95,7 +97,9 @@ export async function installDesktopMock(
           if (command === "desktop_load")
             return JSON.parse(localStorage.getItem(key) ?? "null");
           if (command === "plugin:dialog|open")
-            return "/tmp/hyperforest-desktop-test";
+            return args.options?.directory
+              ? "/tmp/hyperforest-desktop-test"
+              : "/tmp/a reading.pdf";
           if (command === "desktop_select")
             return { directory: args.directory, yaml: null, notes: {} };
           if (command === "desktop_pending_sessions")
@@ -128,6 +132,10 @@ export async function installDesktopMock(
           if (command === "desktop_enable_backups") return null;
           if (command === "desktop_open_note") {
             localStorage.setItem("test.opened-note", "yes");
+            return null;
+          }
+          if (command === "desktop_open_resource") {
+            localStorage.setItem("test.opened-resource", args.resource!);
             return null;
           }
           throw new Error(`Unexpected command ${command}`);

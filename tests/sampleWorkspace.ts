@@ -31,5 +31,5 @@ export function sampleWorkspace(now: number): State {
     ["tell", "share", "Tell the story"],
   ] as const)
     state = apply(state, { type: "add", id, parentId, title }, now);
-  return state;
+  return apply(state, { type: "layout", treeId: "project" }, now);
 }

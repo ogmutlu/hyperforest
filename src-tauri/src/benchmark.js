@@ -16,15 +16,32 @@
       over25ms: samples.filter((sample) => sample > 25).length };
   };
   const click = (text) => {
-    const button = [...document.querySelectorAll("button")].find((button) => button.textContent.trim() === text);
+    const button = [...document.querySelectorAll("button")].find((button) =>
+      !button.closest("[inert]") && button.getClientRects().length &&
+      (button.textContent.trim() === text || button.getAttribute("aria-label") === text));
     if (!button) throw new Error("Missing button: " + text);
     button.click();
   };
+  const write = async (input, value) => {
+    const prototype = input instanceof HTMLSelectElement ? HTMLSelectElement.prototype : HTMLInputElement.prototype;
+    Object.getOwnPropertyDescriptor(prototype, "value").set.call(input, value);
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+    input.dispatchEvent(new Event("change", { bubbles: true }));
+    await frame();
+  };
   try {
+    localStorage.setItem("hyperforest.tutorial.desktop.v1", "seen");
+    localStorage.setItem("hyperforest.tutorial.web.v1", "seen");
+    document.querySelector('[aria-label="Close tutorial"]')?.click();
     const previousReport = sessionStorage.getItem("hyperforest-benchmark-before-reload");
     if (previousReport) {
       await wait(() => document.querySelector('[aria-label="Reset interface zoom"]')?.textContent.trim() === "110%" && document.querySelector('.desktop-save-status summary[aria-label="Autosaved"]'));
       if (document.querySelector(".desktop-error")) throw new Error(document.querySelector(".desktop-error").textContent);
+      for (const kind of ["deadline", "thought", "reading", "habit"]) {
+        if (!document.querySelector(`.goal[data-vertex-kind="${kind}"]`)) throw new Error("Vertex kind was lost on native reload: " + kind);
+      }
+      const loaded = await window.__TAURI_INTERNALS__.invoke("desktop_load");
+      if (!loaded.yaml.includes("frequency: 3") || !loaded.yaml.includes("interval: week") || !loaded.yaml.includes("https://example.org/paper.pdf")) throw new Error("Native reload lost habit configuration or reading attachment");
       document.querySelector('[aria-label="Session history"]').click();
       await wait(() => document.querySelector('.history-dialog[open]'));
       const savedRange = JSON.parse(localStorage.getItem("hyperforest.history-range"));
@@ -44,6 +61,55 @@
     await wait(() => document.querySelector('[data-testid="node-root"]') && document.querySelector('.desktop-save-status summary[aria-label="Autosaved"]'));
     const initialDevicePixelRatio = devicePixelRatio;
     const startupToSavedGraphMs = performance.now();
+    const controls = document.querySelector('[aria-label="Graph controls"]');
+    if (controls.querySelectorAll("button").length !== 2 || !document.querySelector(".graph-tools-separator")) throw new Error("Right toolbar groups are missing");
+    for (const kind of ["vanilla", "deadline", "thought", "reading", "habit"]) {
+      const previousPositions = new Map([...document.querySelectorAll(".goal")].map((node) => [node.dataset.testid, node.getAttribute("transform")]));
+      const count = previousPositions.size;
+      click(`Create ${kind} vertex`);
+      await wait(() => document.querySelector('.dialog[open] input[maxlength="100"]'));
+      const form = document.querySelector('.dialog[open] form');
+      const name = form.querySelector('input[maxlength="100"]');
+      if (document.activeElement !== name || name.placeholder) throw new Error("New vertex name is not immediately writable or still has placeholder copy");
+      if (form.querySelector('[aria-label="Parent vertex"]')) throw new Error("Creation still asks for a parent");
+      await write(name, `Native ${kind}`);
+      if (kind === "reading") await write(form.querySelector('[aria-label="File path or website"]'), "https://example.org/paper.pdf");
+      form.requestSubmit();
+      await wait(() => !document.querySelector('.dialog[open]') && document.querySelectorAll(".goal").length === count + 1);
+      if (document.querySelector(".inspector").dataset.editing !== "true") throw new Error("Creation did not enter edit mode");
+      const created = document.querySelector(".goal.selected");
+      if (created.dataset.vertexKind !== kind) throw new Error("Wrong vertex kind after native save");
+      if (document.querySelector(`[data-testid="edge-${created.dataset.testid.slice(5)}"]`)) throw new Error("New vertex is not isolated");
+      for (const [id, transform] of previousPositions) {
+        if (document.querySelector(`[data-testid="${id}"]`).getAttribute("transform") !== transform) throw new Error("Creation rearranged an existing vertex");
+      }
+    }
+    click("Record repetition");
+    await wait(() => document.querySelector(".habit-progress")?.textContent.includes("1 / 1"));
+    click("Record repetition");
+    await wait(() => document.querySelector(".habit-progress")?.textContent.includes("2 / 1"));
+    click("Edit frequency");
+    await wait(() => document.querySelector('[aria-label="Repetitions"]'));
+    await write(document.querySelector('[aria-label="Repetitions"]'), "3");
+    await write(document.querySelector('[aria-label="Frequency"]'), "week");
+    document.querySelector('.dialog[open] form').requestSubmit();
+    await wait(() => document.querySelector(".habit-progress")?.textContent.includes("2 / 3 this week"));
+    const beforePractice = (await window.__TAURI_INTERNALS__.invoke("desktop_load")).yaml;
+    click("Tutorial");
+    await wait(() => document.querySelector(".tutorial-welcome"));
+    click("Start practicing");
+    await wait(() => document.querySelector('[data-testid="node-tutorial-root"]'));
+    click("Create vanilla vertex");
+    await wait(() => document.querySelector('.dialog[open] input[maxlength="100"]'));
+    await write(document.querySelector('.dialog[open] input[maxlength="100"]'), "Native practice only");
+    document.querySelector('.dialog[open] form').requestSubmit();
+    await wait(() => document.querySelector(".tutorial-coach")?.textContent.includes("Step 2 of 15"));
+    click("Skip tutorial");
+    await wait(() => !document.querySelector(".tutorial-shell"));
+    if ((await window.__TAURI_INTERNALS__.invoke("desktop_load")).yaml !== beforePractice) throw new Error("Practice wrote into the native workspace");
+    if (document.body.style.overflow) throw new Error("Exiting practice did not restore scrolling");
+    document.querySelector('[data-testid="node-root"] [role="button"]').dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+    await frame();
     const svg = document.querySelector(".graph-svg");
     const samples = async (count, zoom) => {
       const values = [];
@@ -59,7 +125,7 @@
     const idleFrames = await samples(60, false);
     const zoomFrames = await samples(120, true);
     await new Promise((resolve) => setTimeout(resolve, 400));
-    click("Edit graph");
+    if (document.querySelector('button[aria-label="Edit graph"]')) click("Edit graph");
     const editsMs = [];
     for (let i = 1; i <= 3; i++) {
       await wait(() => document.querySelector('[aria-label="Rename selected vertex"]:not(:disabled)'));
@@ -165,8 +231,10 @@
     if (document.querySelector('[role="alert"]')) throw new Error(document.querySelector('[role="alert"]').textContent);
     document.querySelector('[aria-label="Zoom interface in"]').click();
     await wait(() => localStorage.getItem("hyperforest.interface-zoom") === "1.1");
-    const report = { engine: navigator.userAgent, vertices: 500, devicePixelRatio: initialDevicePixelRatio,
+    const report = { engine: navigator.userAgent, vertices: document.querySelectorAll(".goal").length, devicePixelRatio: initialDevicePixelRatio,
       startupToSavedGraphMs, idleFrames, zoomFrames, editAndSaveMs: editsMs,
+      vertexKindChecks: "passed: all five kinds created through the real UI; isolated defaults, immediate name focus, automatic edit mode, stable existing positions, habit counter/configuration, reading attachment, and native reload",
+      tutorialChecks: "passed: real practice creation, automatic task advancement, no native workspace writes, and scrolling restored on exit",
       focusKeyboardAndTrayChecks: "passed: running, paused, resumed, saved; native tray updates succeeded",
       calendarChecks: "passed: repeated open/close, Escape isolation, switching fields, selection, viewport bounds, manual-session date selection",
       archiveChecks: "passed: production native ZIP write/read paths, export through interface, cancelled import preserves data, confirmed import restores the workspace",
