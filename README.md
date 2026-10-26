@@ -42,8 +42,10 @@ hypertrees, graph editing, focus sessions, notes, history, and backups. Skip or
 finish it to dismiss it on this device. Use **Tutorial** at the bottom to open it
 again, including on the desktop directory-selection screen.
 
-Create a hypertree, enable **Edit graph**, and add goals. Drag vertices to place
-them and drag edge handles to reconnect them. **Options (gear) → pedantic** requires
+Create a hypertree, select a goal, and choose **New vertex** to add a goal beneath
+it. Enable **Edit graph** to drag vertices into place and drag edge handles to
+reconnect them. A small document symbol marks vertices with nonblank notes.
+**Options (gear) → pedantic** requires
 connected graphs and connected color classes. It is off by default.
 
 Double-click a goal or select **Focus** to start its timer. **Pause** freezes the
@@ -61,7 +63,8 @@ in hours and minutes. The history icon to its right opens session history. The s
 total appears beneath its name. On desktop, a narrow status bar holds
 **Autosaved** and interface zoom. Hover or focus **Autosaved** for the directory
 and last save time; click for storage controls. Editing
-controls appear only in **Edit graph** mode; **Finish goal** and **Delete hypertree/subtree**
+controls for arranging, coloring, finishing, and deleting goals appear in
+**Edit graph** mode; **Finish goal** and **Delete hypertree/subtree**
 follow **Vertex color**. The gear beside Focus opens **Options** directly.
 **Workspace actions (⋯)** contains export, import, tab
 ordering, and clear-data controls. The same controls serve web and desktop, with
@@ -137,7 +140,9 @@ In hiper, open **Settings** and save this app's data folder, or run
 `hiper set --hyperfokus-dir "/path/to/data"`. Saving a titled session in hiper's
 CLI or TUI delivers it through `hiper-inbox/*.json`. The desktop app imports it
 on its next autosave (within 30 seconds while open), or when the workspace opens.
-An exact, unique node title receives the session. Otherwise a node with that
+An exact tree title receives the session at that tree's root. Otherwise an exact,
+unique node title receives it, with linked nodes resolved to their target tree.
+Multiple links to the same tree count as one destination. Otherwise a node with that
 name under the `hiper` tree receives it; the tree and node are created as needed.
 The import preserves pause intervals and leaves any active desktop timer alone.
 Inbox files are removed only after the updated workspace is saved, and replaying

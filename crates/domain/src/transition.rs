@@ -326,12 +326,23 @@ pub fn apply(state: &mut Snapshot, command: Command, now: u64) -> Result<(), Err
             if state.sessions.iter().any(|session| session.id == id) {
                 return Ok(());
             }
-            let matches: Vec<Id> = state
-                .nodes
+            // A tree and its linked vertices represent the same destination.
+            // Prefer an explicitly named tree, even if a previous import created
+            // a fallback child with that title.
+            let mut matches: Vec<Id> = state
+                .trees
                 .iter()
-                .filter(|node| node.title == title)
-                .map(|node| node.id.clone())
+                .filter(|tree| tree.title == title)
+                .map(|tree| tree.id.clone())
                 .collect();
+            if matches.is_empty() {
+                for node in state.nodes.iter().filter(|node| node.title == title) {
+                    let target = state.nodes[resolve_focus(state, &node.id)?].id.clone();
+                    if !matches.contains(&target) {
+                        matches.push(target);
+                    }
+                }
+            }
             let node_id =
                 if matches.len() == 1 {
                     matches[0].clone()

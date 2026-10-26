@@ -317,6 +317,97 @@ fn hiper_import_matches_titles_and_falls_back_to_a_reusable_hiper_tree() {
 }
 
 #[test]
+fn hiper_import_prefers_the_named_tree_over_links_and_existing_fallbacks() {
+    let state = tree()
+        .apply(import_session("fallback", "tez"), 9000)
+        .unwrap()
+        .apply(
+            Command::Create {
+                id: id("thesis"),
+                title: id("tez"),
+            },
+            9000,
+        )
+        .unwrap()
+        .apply(
+            Command::Add {
+                id: id("thesis-link"),
+                tree_id: id("root"),
+                parent_id: Some(id("root")),
+                title: id("tez"),
+                linked_tree_id: Some(id("thesis")),
+            },
+            9000,
+        )
+        .unwrap();
+    let imported = state
+        .apply(import_session("matched", "tez"), 10000)
+        .unwrap();
+    let session = &imported.snapshot().sessions[1];
+    assert_eq!(session.tree_id, id("thesis"));
+    assert_eq!(session.node_id, id("thesis"));
+    assert_eq!(session.title, id("General"));
+    assert_eq!(session.group, id("tez"));
+    assert_eq!(session.periods, imported.snapshot().sessions[0].periods);
+    assert_eq!(
+        imported.snapshot().nodes.len(),
+        state.snapshot().nodes.len()
+    );
+    let reloaded = State::new(imported.snapshot().clone()).unwrap();
+    let totals = time::totals(reloaded.snapshot(), 10000, None).unwrap();
+    let root_index = graph::node_index(reloaded.snapshot(), &id("thesis")).unwrap();
+    assert_eq!(totals[root_index], 3000);
+    assert_eq!(
+        reloaded
+            .apply(import_session("matched", "tez"), 10000)
+            .unwrap(),
+        reloaded
+    );
+}
+
+#[test]
+fn hiper_import_resolves_multiple_matching_links_to_one_destination() {
+    let mut state = tree()
+        .apply(
+            Command::Create {
+                id: id("target"),
+                title: id("Destination"),
+            },
+            1000,
+        )
+        .unwrap();
+    for name in ["link-one", "link-two"] {
+        let source = format!("source-{name}");
+        state = state
+            .apply(
+                Command::Create {
+                    id: id(&source),
+                    title: id(&source),
+                },
+                1000,
+            )
+            .unwrap();
+        state = state
+            .apply(
+                Command::Add {
+                    id: id(name),
+                    tree_id: id(&source),
+                    parent_id: Some(id(&source)),
+                    title: id("alias"),
+                    linked_tree_id: Some(id("target")),
+                },
+                1000,
+            )
+            .unwrap();
+    }
+    let state = state
+        .apply(import_session("matched", "alias"), 9000)
+        .unwrap();
+    assert_eq!(state.snapshot().sessions[0].node_id, id("target"));
+    assert_eq!(state.snapshot().trees.len(), 4);
+}
+
+#[test]
 fn imported_history_credits_new_and_existing_trees_without_changing_session_dates() {
     let state = tree()
         .apply(import_session("older", "Work"), 10000)

@@ -20,7 +20,7 @@ const lessons = [
     icon: "plus",
     body: "Choose New hypertree at the top and give it a name, such as Learn guitar. Each hypertree gets its own tab, so you can move between projects.",
     action:
-      "Turn on Edit graph, select a goal, then choose New vertex to add a smaller goal beneath it. Try Practice chords and Learn a song.",
+      "Select a goal, then choose New vertex to add a smaller goal beneath it. Try Practice chords and Learn a song.",
   },
   {
     title: "Make the graph your own",
@@ -39,7 +39,7 @@ const lessons = [
   {
     title: "Keep the context, see your progress",
     icon: "notes",
-    body: "Select a goal and choose Notes to write Markdown notes. The goal's Total focused includes time spent on its descendants.",
+    body: "Select a goal and choose Notes to write Markdown notes. A small document symbol marks vertices with notes. The goal's Total focused includes time spent on its descendants.",
     action:
       "Today at the top shows focus across your workspace. The history icon next to it opens saved sessions, date filters, and totals.",
   },

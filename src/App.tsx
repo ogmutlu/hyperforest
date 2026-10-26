@@ -653,6 +653,18 @@ export function App({
                 <div className="selection-actions">
                   <button
                     className="quiet-button"
+                    disabled={busy || node.finishedAt !== undefined}
+                    onClick={() => {
+                      setNewName("");
+                      setLinkedTreeId("");
+                      setNewParent(node.id);
+                      setDialog("child");
+                    }}
+                  >
+                    <Icon name="plus" size={16} /> New vertex
+                  </button>
+                  <button
+                    className="quiet-button"
                     aria-pressed={editing}
                     onClick={() => setEditing((value) => !value)}
                   >
@@ -688,18 +700,6 @@ export function App({
               </div>
               {editing && (
                 <div className="edit-toolbar" aria-label="Graph editing">
-                  <button
-                    className="quiet-button"
-                    disabled={busy || node.finishedAt !== undefined}
-                    onClick={() => {
-                      setNewName("");
-                      setLinkedTreeId("");
-                      setNewParent(node.id);
-                      setDialog("child");
-                    }}
-                  >
-                    <Icon name="plus" size={16} /> New vertex
-                  </button>
                   <button
                     className="quiet-button"
                     aria-label="Vertex color"

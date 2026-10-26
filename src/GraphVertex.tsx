@@ -2,6 +2,7 @@ import { memo } from "react";
 import type { PointerEvent as ReactPointerEvent } from "react";
 import type { GoalNode } from "./model";
 import { assignedNodeColors, shortTime } from "./presentation";
+import { Icon } from "./icons";
 
 interface Props {
   node: GoalNode;
@@ -114,6 +115,21 @@ export const GraphVertex = memo(function GraphVertex({
           opacity=".16"
           strokeWidth=".7"
         />
+        {node.notes.trim().length > 0 && (
+          <g
+            transform={`translate(${radius - 2} ${-radius - 10})`}
+            className="node-note-indicator"
+            role="img"
+            aria-label="Has notes"
+            style={{ color }}
+          >
+            <title>Has notes</title>
+            <rect width="18" height="18" rx="4" fill="#101820" />
+            <g transform="translate(2 2)">
+              <Icon name="notes" size={14} />
+            </g>
+          </g>
+        )}
         <text
           y={radius + 23}
           textAnchor="middle"

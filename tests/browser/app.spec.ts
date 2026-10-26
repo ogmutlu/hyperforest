@@ -129,6 +129,79 @@ test.beforeEach(async ({ page }) => {
   }, fixture);
 });
 
+for (const desktop of [false, true]) {
+  test(`creates vertices without edit mode and marks nonblank notes (${desktop ? "desktop" : "web"})`, async ({
+    page,
+  }) => {
+    if (desktop) await installDesktopMock(page);
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto("./");
+    if (desktop) {
+      await page
+        .getByRole("button", { name: "Choose directory", exact: true })
+        .click();
+      await page
+        .getByRole("button", { name: "New hypertree", exact: true })
+        .click();
+      await page.getByLabel("Hypertree name").fill("Test project");
+      await page
+        .getByRole("button", { name: "Create hypertree", exact: true })
+        .click();
+    }
+    const add = page.getByRole("button", { name: "New vertex", exact: true });
+    await expect(add).toBeVisible();
+    await add.click();
+    const parentId = await page
+      .getByLabel("Parent vertex", { exact: true })
+      .inputValue();
+    await page.getByLabel("Goal name", { exact: true }).fill("Quick goal");
+    await page.getByRole("button", { name: "Add vertex", exact: true }).click();
+    await expect(page.locator(".inspector h2")).toHaveText("Quick goal");
+    await expect(page.locator(".inspector")).toHaveAttribute(
+      "data-editing",
+      "false",
+    );
+    await add.click();
+    await expect(
+      page.getByLabel("Parent vertex", { exact: true }),
+    ).not.toHaveValue(parentId);
+    await page.keyboard.press("Escape");
+    const vertex = page.locator(".goal").filter({
+      has: page.getByRole("button", { name: "Select Quick goal", exact: true }),
+    });
+    const badge = vertex.getByRole("img", { name: "Has notes", exact: true });
+    const saveNotes = async (value: string): Promise<void> => {
+      await page
+        .getByRole("button", { name: "Edit goal", exact: true })
+        .click();
+      await page.getByLabel("Markdown notes", { exact: true }).fill(value);
+      await page
+        .getByRole("button", { name: "Save changes", exact: true })
+        .click();
+      await expect(page.getByRole("dialog")).toHaveCount(0);
+    };
+    await expect(badge).toHaveCount(0);
+    await saveNotes("# A useful note");
+    await expect(badge).toBeVisible();
+    await page.reload();
+    await expect(badge).toBeVisible();
+    await vertex
+      .getByRole("button", { name: "Select Quick goal", exact: true })
+      .click();
+    await saveNotes(" \n\t ");
+    await expect(badge).toHaveCount(0);
+    await saveNotes("Another note");
+    await expect(badge).toBeVisible();
+    await saveNotes("");
+    await expect(badge).toHaveCount(0);
+    expect(
+      await page.evaluate(
+        () => document.documentElement.scrollWidth <= innerWidth,
+      ),
+    ).toBe(true);
+  });
+}
+
 test("simple filled vertices and selection controls survive mode and selection changes", async ({
   page,
 }) => {
@@ -374,7 +447,7 @@ test("hyperforest supports isolated colored vertices, notes and a full-width can
   await expect(page).toHaveTitle(/hyperforest/);
   await expect(
     page.getByRole("button", { name: "New vertex", exact: true }),
-  ).toHaveCount(0);
+  ).toBeVisible();
   await page.getByRole("button", { name: "Edit graph", exact: true }).click();
   await page.getByRole("button", { name: "New vertex", exact: true }).click();
   await page.getByLabel("Goal name", { exact: true }).fill("Independent");
@@ -1289,7 +1362,7 @@ test("options open directly and finish/delete follow vertex color only in edit m
     (await page.locator(".edit-toolbar button").allTextContents()).map((text) =>
       text.trim(),
     ),
-  ).toEqual(["New vertex", "Vertex color", "Finish goal", "Delete hypertree"]);
+  ).toEqual(["Vertex color", "Finish goal", "Delete hypertree"]);
   await expect(
     page.getByRole("button", { name: "Finish goal", exact: true }),
   ).toBeDisabled();
