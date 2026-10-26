@@ -1142,6 +1142,7 @@ button:disabled {
   color: var(--muted);
 }
 .edit-toolbar {
+  justify-content: flex-end;
   margin-top: 12px;
   padding-top: 8px;
   border-top: 1px solid var(--line);
