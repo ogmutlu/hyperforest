@@ -30,6 +30,7 @@ pub struct Save {
 
 pub struct Store {
     pub directory: PathBuf,
+    pub backup_settings: crate::backups::Settings,
     _lock: File,
     last_yaml: Option<String>,
     last_notes: BTreeMap<String, String>,
@@ -113,6 +114,7 @@ impl Store {
         let last_notes = notes(&directory.join("notes"))?;
         Ok(Self {
             directory,
+            backup_settings: crate::backups::Settings::default(),
             _lock: lock,
             last_yaml,
             last_notes,
@@ -185,9 +187,7 @@ impl Store {
         self.last_yaml = Some(request.yaml);
         // Retain orphaned Markdown files, including those belonging to deleted vertices.
         self.last_notes = notes(&self.directory.join("notes"))?;
-        let backup_error = self
-            .backup(&Local::now().format("%Y-%m-%d").to_string())
-            .err();
+        let backup_error = self.backup_if_due(Local::now().date_naive()).err();
         let mut loaded = self.loaded();
         let inbox_error = self.acknowledge_sessions(&request.imported_sessions).err();
         loaded.backup_error = match (backup_error, inbox_error) {
@@ -195,6 +195,48 @@ impl Store {
             (a, b) => a.or(b),
         };
         Ok(loaded)
+    }
+
+    pub fn backup_if_due(&self, today: chrono::NaiveDate) -> Result<()> {
+        if !self.backup_settings.enabled {
+            return Ok(());
+        }
+        let marker = self.directory.join(".last-backup-date");
+        let previous = if marker.exists() {
+            Some(
+                chrono::NaiveDate::parse_from_str(
+                    fs::read_to_string(&marker).map_err(error)?.trim(),
+                    "%Y-%m-%d",
+                )
+                .map_err(error)?,
+            )
+        } else {
+            // Existing installations already have dated backup directories.
+            fs::read_dir(self.directory.join("backups"))
+                .map_err(error)?
+                .filter_map(|entry| entry.ok())
+                .filter(|entry| entry.path().join("workspace.yaml").is_file())
+                .filter_map(|entry| {
+                    chrono::NaiveDate::parse_from_str(
+                        &entry.file_name().to_string_lossy(),
+                        "%Y-%m-%d",
+                    )
+                    .ok()
+                })
+                .max()
+        };
+        if self.backup_settings.due(previous, today) {
+            self.backup_now(today)?;
+        }
+        Ok(())
+    }
+
+    pub fn backup_now(&self, today: chrono::NaiveDate) -> Result<()> {
+        self.backup(&today.format("%Y-%m-%d").to_string())?;
+        atomic_write(
+            &self.directory.join(".last-backup-date"),
+            today.to_string().as_bytes(),
+        )
     }
 
     pub fn backup(&self, date: &str) -> Result<()> {
@@ -315,6 +357,7 @@ mod tests {
         let mut store = Store::open(path.clone()).unwrap();
         fs::remove_dir_all(path.join("backups")).unwrap();
         fs::write(path.join("backups"), "block backup directory").unwrap();
+        fs::remove_file(path.join(".last-backup-date")).unwrap();
         let loaded = store.save(save("next")).unwrap();
         assert!(loaded.backup_error.is_some());
         assert_eq!(loaded.notes["Work - Read.md"], "next");
@@ -330,6 +373,8 @@ mod tests {
         request.structure = "detailed: refreshed\n".into();
         request.simple = "readable: refreshed\n".into();
         store.save(request).unwrap();
+        // Manual snapshots refresh reports immediately; autosave alone respects the schedule.
+        store.backup_now(Local::now().date_naive()).unwrap();
         let date = Local::now().format("%Y-%m-%d").to_string();
         for name in ["structure.yaml", "simple.yaml"] {
             assert_eq!(
@@ -373,6 +418,51 @@ mod tests {
         drop(store);
         fs::remove_dir_all(path).unwrap();
     }
+    #[test]
+    fn autosave_updates_live_files_without_overwriting_weekly_snapshots() {
+        let path = folder();
+        let mut store = Store::open(path.clone()).unwrap();
+        let today = Local::now().date_naive();
+        store.save(save("first snapshot")).unwrap();
+        let loaded = store.save(save("latest autosaved work")).unwrap();
+        assert_eq!(loaded.notes["Work - Read.md"], "latest autosaved work");
+        let first = path
+            .join("backups")
+            .join(today.to_string())
+            .join("notes/Work - Read.md");
+        assert_eq!(fs::read_to_string(first).unwrap(), "first snapshot");
+        store.backup_if_due(today + chrono::Days::new(6)).unwrap();
+        assert_eq!(fs::read_dir(path.join("backups")).unwrap().count(), 1);
+        store.backup_if_due(today + chrono::Days::new(7)).unwrap();
+        let next = path
+            .join("backups")
+            .join((today + chrono::Days::new(7)).to_string())
+            .join("notes/Work - Read.md");
+        assert_eq!(fs::read_to_string(next).unwrap(), "latest autosaved work");
+        drop(store);
+        fs::remove_dir_all(path).unwrap();
+    }
+
+    #[test]
+    fn disabling_automatic_backups_keeps_autosave_and_manual_backups_available() {
+        let path = folder();
+        let mut store = Store::open(path.clone()).unwrap();
+        store.backup_settings.enabled = false;
+        store
+            .save(save("autosaved with automatic backups off"))
+            .unwrap();
+        assert!(path.join("workspace.yaml").is_file());
+        assert_eq!(
+            fs::read_to_string(path.join("notes/Work - Read.md")).unwrap(),
+            "autosaved with automatic backups off"
+        );
+        assert_eq!(fs::read_dir(path.join("backups")).unwrap().count(), 0);
+        store.backup_now(Local::now().date_naive()).unwrap();
+        assert_eq!(fs::read_dir(path.join("backups")).unwrap().count(), 1);
+        drop(store);
+        fs::remove_dir_all(path).unwrap();
+    }
+
     #[test]
     fn daily_backups_include_notes_and_keep_thirty_days() {
         let path = folder();

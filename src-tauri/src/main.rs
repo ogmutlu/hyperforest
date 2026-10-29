@@ -1,4 +1,5 @@
 mod archive;
+mod backups;
 #[cfg(feature = "benchmark")]
 mod benchmark;
 mod hiper;
@@ -64,7 +65,26 @@ async fn desktop_save(
     if store.directory != Path::new(&directory) {
         return Err("The selected data directory changed. Reload before saving.".into());
     }
-    store.save(request)
+    let settings_error =
+        match backups::Settings::load(&state.config.with_file_name("backup-settings.json")) {
+            Ok(settings) => {
+                store.backup_settings = settings;
+                None
+            }
+            Err(error) => {
+                // A backup preference error must never prevent saving current work.
+                store.backup_settings.enabled = false;
+                Some(format!("Could not read backup settings: {error}"))
+            }
+        };
+    let mut loaded = store.save(request)?;
+    if let Some(error) = settings_error {
+        loaded.backup_error = Some(match loaded.backup_error {
+            Some(other) => format!("{other}; {error}"),
+            None => error,
+        });
+    }
+    Ok(loaded)
 }
 #[tauri::command]
 async fn desktop_pending_sessions(
@@ -134,7 +154,41 @@ async fn desktop_open_resource(resource: String, state: State<'_, Desktop>) -> R
     Ok(())
 }
 #[tauri::command]
-async fn desktop_enable_backups() -> Result<(), String> {
+async fn desktop_enable_backups(state: State<'_, Desktop>) -> Result<(), String> {
+    let settings = backups::Settings::load(&state.config.with_file_name("backup-settings.json"))?;
+    configure_backups(&settings)
+}
+
+#[tauri::command]
+async fn desktop_backup_settings(state: State<'_, Desktop>) -> Result<backups::Settings, String> {
+    backups::Settings::load(&state.config.with_file_name("backup-settings.json"))
+}
+
+#[tauri::command]
+async fn desktop_set_backup_settings(
+    settings: backups::Settings,
+    state: State<'_, Desktop>,
+) -> Result<Option<String>, String> {
+    let mut current = state.store.lock().map_err(|error| error.to_string())?;
+    settings.save(&state.config.with_file_name("backup-settings.json"))?;
+    if let Some(store) = current.as_mut() {
+        store.backup_settings = settings.clone();
+    }
+    // Saving preferences still works if the host has no user systemd session.
+    Ok(configure_backups(&settings).err())
+}
+
+#[tauri::command]
+async fn desktop_backup_now(directory: String, state: State<'_, Desktop>) -> Result<(), String> {
+    let current = state.store.lock().map_err(|error| error.to_string())?;
+    let store = current.as_ref().ok_or("Choose a data directory first.")?;
+    if store.directory != Path::new(&directory) {
+        return Err("The selected directory changed.".into());
+    }
+    store.backup_now(chrono::Local::now().date_naive())
+}
+
+fn configure_backups(settings: &backups::Settings) -> Result<(), String> {
     #[cfg(feature = "benchmark")]
     if benchmark::directory().is_some() {
         return Ok(());
@@ -145,6 +199,18 @@ async fn desktop_enable_backups() -> Result<(), String> {
         .unwrap_or_else(|| PathBuf::from(home).join(".config"));
     let units = config.join("systemd/user");
     std::fs::create_dir_all(&units).map_err(|error| error.to_string())?;
+    if !settings.enabled {
+        if units.join("hyperforest-backup.timer").exists() {
+            let output = std::process::Command::new("systemctl")
+                .args(["--user", "disable", "--now", "hyperforest-backup.timer"])
+                .output()
+                .map_err(|error| error.to_string())?;
+            if !output.status.success() {
+                return Err(String::from_utf8_lossy(&output.stderr).into_owned());
+            }
+        }
+        return Ok(());
+    }
     let executable = std::env::var_os("APPIMAGE")
         .map(PathBuf::from)
         .unwrap_or(std::env::current_exe().map_err(|error| error.to_string())?);
@@ -153,8 +219,8 @@ async fn desktop_enable_backups() -> Result<(), String> {
         .replace('\\', "\\\\")
         .replace('"', "\\\"")
         .replace('%', "%%");
-    let service = format!("[Unit]\nDescription=Daily hyperforest backup\n[Service]\nType=oneshot\nExecStart=\"{escaped}\" --backup-only\n");
-    let timer = "[Unit]\nDescription=Daily hyperforest backup\n[Timer]\nOnCalendar=daily\nPersistent=true\n[Install]\nWantedBy=timers.target\n";
+    let service = format!("[Unit]\nDescription=Scheduled hyperforest recovery snapshots\n[Service]\nType=oneshot\nExecStart=\"{escaped}\" --backup-only\n");
+    let timer = "[Unit]\nDescription=Scheduled hyperforest recovery snapshots\n[Timer]\nOnCalendar=daily\nPersistent=true\n[Install]\nWantedBy=timers.target\n";
     store::atomic_write(
         &units.join("hyperforest-backup.service"),
         service.as_bytes(),
@@ -180,18 +246,24 @@ fn backup_only() -> Result<(), String> {
         .unwrap_or_else(|| {
             PathBuf::from(std::env::var_os("HOME").unwrap_or_default()).join(".config")
         });
-    let selected = config.join("io.github.ogmutlu.hyperforest/data-directory");
+    let directory = config.join("io.github.ogmutlu.hyperforest");
+    let settings = backups::Settings::load(&directory.join("backup-settings.json"))?;
+    if !settings.enabled {
+        return Ok(());
+    }
+    let selected = directory.join("data-directory");
     if !selected.exists() {
         return Ok(());
     }
     let path = PathBuf::from(std::fs::read_to_string(selected).map_err(|error| error.to_string())?);
-    let store = match Store::open(path) {
+    let mut store = match Store::open(path) {
         Ok(store) => store,
         Err(message) if message.contains("already open") => return Ok(()),
         Err(message) => return Err(message),
     };
+    store.backup_settings = settings;
     if store.directory.join("workspace.yaml").exists() {
-        store.backup(&chrono::Local::now().format("%Y-%m-%d").to_string())?;
+        store.backup_if_due(chrono::Local::now().date_naive())?;
     }
     Ok(())
 }
@@ -247,6 +319,9 @@ fn main() {
             desktop_open_note,
             desktop_open_resource,
             desktop_enable_backups,
+            desktop_backup_settings,
+            desktop_set_backup_settings,
+            desktop_backup_now,
             benchmark::desktop_benchmark_result
         ]);
     #[cfg(not(feature = "benchmark"))]
@@ -262,7 +337,10 @@ fn main() {
         desktop_pending_sessions,
         desktop_open_note,
         desktop_open_resource,
-        desktop_enable_backups
+        desktop_enable_backups,
+        desktop_backup_settings,
+        desktop_set_backup_settings,
+        desktop_backup_now
     ]);
     builder
         .run(tauri::generate_context!())

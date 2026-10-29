@@ -5,6 +5,8 @@ import { TutorialButton } from "./TutorialContext";
 import { DesktopSaveStatus } from "./DesktopSaveStatus";
 import { chooseDesktop, loadDesktop } from "./desktop";
 import type { DesktopWorkspace } from "./desktop";
+import { invoke } from "@tauri-apps/api/core";
+import { BackupSettings } from "./BackupSettings";
 
 const ZOOM_KEY = "hyperforest.interface-zoom";
 function savedZoom(): number {
@@ -23,6 +25,7 @@ export function DesktopApp() {
   const [ready, setReady] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [backupSettingsOpen, setBackupSettingsOpen] = useState(false);
   const [interfaceZoom, setInterfaceZoom] = useState(savedZoom);
   const requestedZoom = useRef(interfaceZoom);
   const zoomQueue = useRef(Promise.resolve());
@@ -79,7 +82,7 @@ export function DesktopApp() {
       .finally(() => setReady(true));
   }, []);
   const flush = useCallback(async () => {
-    if (!workspace) return;
+    if (!workspace) return false;
     try {
       await workspace.flush();
       setError(
@@ -88,8 +91,10 @@ export function DesktopApp() {
           workspace.backupError ??
           "",
       );
+      return true;
     } catch (reason: unknown) {
       setError(String(reason));
+      return false;
     }
   }, [workspace]);
   useEffect(() => {
@@ -178,8 +183,19 @@ export function DesktopApp() {
             }}
             onBackup={() => {
               setBusy(true);
-              void flush().finally(() => setBusy(false));
+              void (async () => {
+                if (await flush()) {
+                  await invoke("desktop_backup_now", {
+                    directory: workspace.directory,
+                  });
+                  workspace.backupError = null;
+                  setError(workspace.syncError ?? workspace.timerError ?? "");
+                }
+              })()
+                .catch((reason: unknown) => setError(String(reason)))
+                .finally(() => setBusy(false));
             }}
+            onBackupSettings={() => setBackupSettingsOpen(true)}
           />
           {zoomControls}
         </div>
@@ -199,7 +215,7 @@ export function DesktopApp() {
         <main className="empty-workspace">
           <h1>hyperforest</h1>
           <p>
-            Select a directory for workspace.yaml, Markdown notes, and daily
+            Select a directory for workspace.yaml, Markdown notes, and recovery
             backups.
           </p>
           <button
@@ -217,6 +233,15 @@ export function DesktopApp() {
             <TutorialButton />
           </footer>
         </main>
+      )}
+      {backupSettingsOpen && (
+        <BackupSettings
+          close={() => setBackupSettingsOpen(false)}
+          configured={(warning) => {
+            if (workspace) workspace.timerError = warning;
+            setError(warning ?? "");
+          }}
+        />
       )}
     </>
   );

@@ -9,6 +9,8 @@ import { installDesktopMock } from "./desktopHarness";
 async function initialize(page: Page, desktop = false): Promise<void> {
   const state = sampleWorkspace(Date.now());
   await page.addInitScript((state) => {
+    if (localStorage.getItem("hyperforest.panel-position") === null)
+      localStorage.setItem("hyperforest.panel-position", "top");
     localStorage.setItem("hyperforest.tutorial.web.v1", "seen");
     localStorage.setItem("hyperforest.tutorial.desktop.v1", "seen");
     if (!localStorage.getItem("hyperforest.workspace.v1"))
@@ -51,10 +53,14 @@ async function create(
   await page
     .getByRole("button", { name: `Create ${kind} vertex`, exact: true })
     .click();
-  await expect(page.getByLabel("Goal name", { exact: true })).toBeFocused();
+  await expect(
+    page.getByLabel(kind === "thought" ? "Thought text" : "Goal name", {
+      exact: true,
+    }),
+  ).toBeFocused();
   await page.keyboard.type(title);
   await expect(page.getByLabel("Parent vertex", { exact: true })).toHaveCount(
-    0,
+    kind === "thought" ? 0 : 1,
   );
   if (kind === "deadline")
     await page.getByLabel("Deadline", { exact: true }).fill("2035-06-15T12:00");
@@ -70,6 +76,14 @@ async function create(
     .getByRole("button", { name: "Create vertex", exact: true })
     .click();
   await expect(page.getByRole("dialog")).toHaveCount(0);
+  await expect(page.locator(".inspector h2")).toHaveText(
+    "A meaningful project",
+  );
+  await page.getByRole("button", { name: "Fit graph", exact: true }).click();
+  await page
+    .getByRole("button", { name: `Select ${title}`, exact: true })
+    .click();
+  if (kind === "thought") await page.keyboard.press("Escape");
   await expect(page.locator(".inspector h2")).toHaveText(title);
   await expect(page.locator(".inspector")).toHaveAttribute(
     "data-editing",
@@ -149,8 +163,10 @@ for (const desktop of [false, true]) {
       const after = await snapshot(page, desktop);
       const added = after.nodes.find((node) => node.title === `My ${kind}`)!;
       expect(added.vertex?.kind).toBe(kind);
-      expect(added.parentId).toBeNull();
-      await expect(page.getByTestId(`edge-${added.id}`)).toHaveCount(0);
+      expect(added.parentId).toBe(kind === "thought" ? null : "project");
+      await expect(page.getByTestId(`edge-${added.id}`)).toHaveCount(
+        kind === "thought" ? 0 : 1,
+      );
       expect(
         after.nodes
           .filter((node) => node.id !== added.id)
@@ -271,6 +287,16 @@ for (const kind of [
           (await snapshot(page)).nodes.find((item) => item.id === node.id)!.x,
       )
       .not.toBe(node.x);
+    if (kind === "thought") {
+      await page
+        .getByRole("button", { name: `Select ${node.title}`, exact: true })
+        .focus();
+      await page.keyboard.press("Enter");
+      await expect(
+        page.getByLabel("Thought text", { exact: true }),
+      ).toHaveValue(node.title);
+      await page.keyboard.press("Escape");
+    }
     const handle = await page
       .getByTestId(`edge-handle-${node.id}`)
       .boundingBox();

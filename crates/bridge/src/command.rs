@@ -159,6 +159,17 @@ pub fn apply(
     let command = match action {
         Action::ConfigureVertex { id, vertex } => {
             let index = editable(&document, &id)?;
+            // The full thought is presentation metadata; its domain title stays short.
+            if let crate::vertex::Vertex::Thought { text: Some(text) } = &vertex {
+                document.nodes[index].title = text
+                    .split_whitespace()
+                    .take(6)
+                    .collect::<Vec<_>>()
+                    .join(" ")
+                    .chars()
+                    .take(80)
+                    .collect();
+            }
             document.nodes[index].vertex = document.nodes[index].vertex.configure(vertex)?;
             return Ok(document);
         }

@@ -24,7 +24,7 @@ npm ci
 rustup target add wasm32-unknown-unknown
 cargo install wasm-bindgen-cli --version 0.2.114 --locked
 npm run desktop:build -- --bundles deb
-sudo apt install ./src-tauri/target/release/bundle/deb/hyperforest_1.1.0_amd64.deb
+sudo apt install ./src-tauri/target/release/bundle/deb/hyperforest_1.2.0_amd64.deb
 ```
 
 Launch **hyperforest** from your application menu, or run
@@ -87,18 +87,25 @@ Deleted vertices' Markdown files remain on disk for recovery. **Clear local data
 clears the current YAML workspace; notes and backups remain. Finished vertices,
 their notes, and their history remain part of the workspace.
 
-## Daily backups
+## Recovery backups
 
-The app maintains one complete snapshot per local calendar day, updating today's
-snapshot on every save and retaining the latest 30 daily snapshots. All Markdown
-files in `notes/`, including retained files, are backed up.
+Autosave continues to update the current YAML workspace and Markdown notes on
+every change. Separate recovery snapshots default to **once a week**. Open
+**Autosaved → Backup settings** to enable or disable automatic snapshots and set
+an interval from 1 to 365 days. The preference is stored in the desktop app's
+configuration directory. **Back up now** saves the latest work and takes a
+snapshot immediately, even when automatic backups are disabled.
 
-Choosing or reopening a data directory enables the user service
-`hyperforest-backup.timer`. It invokes `hyperforest-desktop --backup-only`, so
-backups also run when the window is closed. It follows the currently selected
-directory. The timer requires a systemd user session; missed runs are caught on
-the next login. If enabling it fails, the app displays an error and continues
-making backups while open.
+Snapshots live in `backups/YYYY-MM-DD/`, include all Markdown files, and retain
+the latest 30 dated snapshots. Automatic saves within the chosen interval leave
+the existing recovery snapshot alone. Manual backups on the same day refresh
+that day's snapshot.
+
+The app configures `hyperforest-backup.timer` in the user systemd session. The
+timer checks daily; `--backup-only` applies your chosen interval before creating
+a snapshot. It follows the selected data directory and runs while the app is
+closed. While the app holds the workspace lock, its regular saves perform the
+same due-date check. Disabling snapshots leaves autosave running.
 
 ```sh
 systemctl --user status hyperforest-backup.timer

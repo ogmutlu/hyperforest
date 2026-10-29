@@ -53,6 +53,7 @@ export async function installDesktopMock(
             paused?: boolean;
             contents?: number[];
             resource?: string;
+            settings?: { enabled: boolean; intervalDays: number };
             options?: { directory?: boolean };
           },
         ) => {
@@ -130,6 +131,27 @@ export async function installDesktopMock(
             return loaded;
           }
           if (command === "desktop_enable_backups") return null;
+          if (command === "desktop_backup_settings")
+            return JSON.parse(
+              localStorage.getItem("test.backup-settings") ??
+                '{"enabled":true,"intervalDays":7}',
+            );
+          if (command === "desktop_set_backup_settings") {
+            localStorage.setItem(
+              "test.backup-settings",
+              JSON.stringify(args.settings),
+            );
+            return null;
+          }
+          if (command === "desktop_backup_now") {
+            localStorage.setItem(
+              "test.manual-backups",
+              String(
+                Number(localStorage.getItem("test.manual-backups") ?? 0) + 1,
+              ),
+            );
+            return null;
+          }
           if (command === "desktop_open_note") {
             localStorage.setItem("test.opened-note", "yes");
             return null;

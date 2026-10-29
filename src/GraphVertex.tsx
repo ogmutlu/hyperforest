@@ -4,7 +4,7 @@ import type { GoalNode } from "./model";
 import { assignedNodeColors, shortTime } from "./presentation";
 import { Icon } from "./icons";
 import { DeadlineTimer, HabitProgress } from "./Clock";
-import { thoughtLines, vertexGeometry } from "./vertices";
+import { thoughtLines, thoughtPreview, vertexGeometry } from "./vertices";
 
 interface Props {
   node: GoalNode;
@@ -16,6 +16,7 @@ interface Props {
   down: (event: ReactPointerEvent<SVGElement>, node?: GoalNode) => void;
   linkDown: (event: ReactPointerEvent<SVGElement>, node: GoalNode) => void;
   select: (id: string) => void;
+  openThought: (id: string, keyboard?: boolean) => void;
   start: (id: string, point: { x: number; y: number }) => Promise<void>;
 }
 export const GraphVertex = memo(function GraphVertex({
@@ -28,6 +29,7 @@ export const GraphVertex = memo(function GraphVertex({
   down,
   linkDown,
   select,
+  openThought,
   start,
 }: Props) {
   const colors = assignedNodeColors(node);
@@ -35,7 +37,7 @@ export const GraphVertex = memo(function GraphVertex({
   const { rx, ry: radius } = vertexGeometry(node);
   const kind = node.vertex?.kind ?? "vanilla";
   const thought = kind === "thought";
-  const lines = thought ? thoughtLines(node.title) : [];
+  const lines = thought ? thoughtLines(thoughtPreview(node)) : [];
   const outline = `M${-rx},0 C${-rx},${-radius * 1.1} ${rx * 0.85},${-radius * 1.25} ${rx},-3 C${rx * 1.1},${radius * 1.1} ${-rx * 0.85},${radius * 1.15} ${-rx},0 Z`;
   return (
     <g
@@ -49,6 +51,7 @@ export const GraphVertex = memo(function GraphVertex({
         tabIndex={0}
         aria-label={`Select ${node.title}`}
         onPointerDown={(event) => down(event, node)}
+        onClick={thought ? () => openThought(node.id) : undefined}
         onDoubleClick={(event) => {
           event.stopPropagation();
           if (node.finishedAt !== undefined) return;
@@ -60,7 +63,8 @@ export const GraphVertex = memo(function GraphVertex({
         onKeyDown={(event) => {
           if (event.key === "Enter" || event.key === " ") {
             event.preventDefault();
-            select(node.id);
+            if (thought) openThought(node.id, true);
+            else select(node.id);
           }
         }}
       >
@@ -151,6 +155,20 @@ export const GraphVertex = memo(function GraphVertex({
             pointerEvents="none"
           >
             <Icon name={kind} size={18} />
+          </g>
+        )}
+        {node.linkedTreeId && (
+          <g
+            transform={`translate(${-rx - 14} ${-radius - 10})`}
+            role="img"
+            aria-label="Link to another hypertree"
+            style={{ color }}
+          >
+            <title>Link to another hypertree</title>
+            <rect width="20" height="20" rx="4" fill="#101820" />
+            <g transform="translate(2 2)">
+              <Icon name="link" size={16} />
+            </g>
           </g>
         )}
         {node.notes.trim().length > 0 && (

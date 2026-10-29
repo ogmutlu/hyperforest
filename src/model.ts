@@ -10,8 +10,14 @@ export type HabitInterval = "day" | "week" | "month";
 export type VertexSettings =
   | { kind: "vanilla" }
   | { kind: "deadline"; deadlineAt: number }
-  | { kind: "thought" }
-  | { kind: "reading"; resource: string }
+  | { kind: "thought"; text?: string }
+  | {
+      kind: "reading";
+      resource: string;
+      progressPercent?: number;
+      pagesRead?: number;
+      totalPages?: number;
+    }
   | { kind: "habit"; frequency: number; interval: HabitInterval };
 export type VertexKind = VertexSettings["kind"];
 export type Vertex =

@@ -149,19 +149,21 @@ export class DesktopWorkspace extends Workspace {
     await invoke("desktop_open_note", { name, directory: this.directory });
   }
 }
-async function enableDailyBackups(workspace: DesktopWorkspace): Promise<void> {
+async function enableAutomaticBackups(
+  workspace: DesktopWorkspace,
+): Promise<void> {
   try {
     await invoke("desktop_enable_backups");
     workspace.timerError = null;
   } catch (reason: unknown) {
-    workspace.timerError = `Daily timer could not be enabled: ${String(reason)}`;
+    workspace.timerError = `Background backup timer could not be configured: ${String(reason)}`;
   }
 }
 export async function loadDesktop(): Promise<DesktopWorkspace | null> {
   const raw: unknown = await invoke("desktop_load");
   if (raw === null) return null;
   const workspace = new DesktopWorkspace(loadedSchema.parse(raw));
-  await enableDailyBackups(workspace);
+  await enableAutomaticBackups(workspace);
   return workspace;
 }
 export async function chooseDesktop(
@@ -182,7 +184,7 @@ export async function chooseDesktop(
     if (loaded.yaml === null && current)
       await workspace.replace(JSON.stringify(current.getSnapshot()));
     else await workspace.flush();
-    await enableDailyBackups(workspace);
+    await enableAutomaticBackups(workspace);
     return workspace;
   } catch (reason: unknown) {
     if (current)

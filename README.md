@@ -17,7 +17,7 @@ candidate theorems.
 ## Start
 
 Linux x86-64 desktop packages are available from [GitHub Releases](https://github.com/ogmutlu/hyperforest/releases).
-Download the `.deb` and install it with `sudo apt install ./hyperforest_1.1.0_amd64.deb`.
+Download the `.deb` and install it with `sudo apt install ./hyperforest_1.2.0_amd64.deb`.
 
 Requires Node 24+, npm, Rust/Cargo, and these one-time tools:
 
@@ -48,22 +48,43 @@ before choosing a desktop directory.
 
 Create a hypertree. The right column holds Edit graph and Options at the top,
 then a divider and five creation buttons below. Hover or focus a symbol to see
-its name. New vertices start isolated, without a parent prompt; use edge handles
-in edit mode to connect them when you want. Choose a vanilla goal, a deadline
-with a live countdown, a thought inside a text-sized oval, a reading with an
-optional file path or website, or a habit with a repetition target per day, week,
-or month. Record and undo habit repetitions from the selected vertex's counter.
-Weeks start on Monday; progress uses the local calendar, and total repetitions
-remain saved across periods. Reading websites open in a new browser tab; desktop
-attachments open in the system viewer. Local file paths are retained on the web
-and can be opened from desktop. Backup ZIPs retain attachment paths, not their files.
+its name. New vertices default to children of the current selection. The parent and
+hypertree-link selectors sit side by side below the name and type settings;
+you can choose another parent or create an isolated vertex. The chosen parent
+stays selected after creation. Thoughts are the exception: they start isolated
+and ask only for their text. Choose a vanilla goal, a deadline with a live
+countdown, a thought, a reading with an optional file path or website, or a habit
+with a repetition target per day, week, or month.
 
-Creation immediately selects the new vertex and turns on Edit graph, ready for
-dragging or connecting. It places only the new vertex; existing positions stay
-unchanged. Use
-**Fit graph** to see vertices beyond the current view, or **Arrange vertices**
-in edit mode to request a new layout. Enable **Edit graph** to drag vertices into place and drag edge handles to
-reconnect them. A small document symbol marks vertices with nonblank notes.
+Thought headings use the first few words. Longer text is previewed inside the
+oval with three dots; click it to open the full editable text. Reading progress
+can be saved as a percentage or as pages read out of a total; the two update
+together. Reading websites open in a new browser tab; desktop attachments open
+in the system viewer. Backup ZIPs retain attachment paths, not their files.
+
+Record and undo habit repetitions from the selected vertex's counter. **History**
+next to it opens a monthly calendar with recorded days in green. Weeks start on
+Monday; progress uses the local calendar, and history remains saved across periods.
+
+Creation turns on Edit graph and places only the new vertex; existing positions
+stay unchanged. Use **Fit graph** to see vertices beyond the current view, or
+**Arrange vertices** in edit mode to request a new layout. Enable **Edit graph**
+to drag vertices and reconnect edge handles. Drag the graph’s bottom-right corner to resize its height;
+the chosen height is remembered on this device across hypertrees and restarts.
+Switching hypertrees opens the view with the root at the top center of the graph,
+without moving any saved vertices.
+Color, finish, and delete appear
+as a vertical icon strip to the left of the right toolbar. The panel above the
+graph keeps a fixed height for every vertex kind, with the name, Notes, and Focus
+on the left and type-specific controls on the right on wider screens. Notes and
+Focus sit beside the name; long names end in an ellipsis.  A document symbol marks
+nonblank notes; a chain symbol marks links to another hypertree.
+**Options (gear) → Selected vertex panel** switches between the compact top
+panel and a narrow panel to the left of the graph. The default is left on wide
+screens and above on narrow screens; an explicit choice takes precedence and is remembered on
+this device for web and desktop. Choose **Automatic (screen size)** to restore
+the responsive default.
+
 **Options (gear) → pedantic** requires
 connected graphs and connected color classes. It is off by default.
 

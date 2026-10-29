@@ -21,7 +21,10 @@ async function create(
   await page
     .getByRole("button", { name: `Create ${kind} vertex`, exact: true })
     .click();
-  const input = page.getByLabel("Goal name", { exact: true });
+  const input = page.getByLabel(
+    kind === "thought" ? "Thought text" : "Goal name",
+    { exact: true },
+  );
   await expect(input).toBeFocused();
   await page.keyboard.type(name);
   if (kind === "reading")
@@ -31,6 +34,11 @@ async function create(
   await page
     .getByRole("button", { name: "Create vertex", exact: true })
     .click();
+  await page.getByRole("button", { name: "Fit graph", exact: true }).click();
+  await page
+    .getByRole("button", { name: `Select ${name}`, exact: true })
+    .click();
+  if (kind === "thought") await page.keyboard.press("Escape");
 }
 async function completePractice(page: Page): Promise<void> {
   await tour(page)

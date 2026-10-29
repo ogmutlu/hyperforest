@@ -9,12 +9,14 @@ export function DesktopSaveStatus({
   error,
   onChoose,
   onBackup,
+  onBackupSettings,
 }: {
   workspace: DesktopWorkspace;
   busy: boolean;
   error: string;
   onChoose: () => void;
   onBackup: () => void;
+  onBackupSettings: () => void;
 }) {
   const hintId = useId();
   useSyncExternalStore(workspace.subscribe, workspace.getSnapshot);
@@ -56,6 +58,13 @@ export function DesktopSaveStatus({
         </button>
         <button className="quiet-button" disabled={busy} onClick={onBackup}>
           Back up now
+        </button>
+        <button
+          className="quiet-button"
+          disabled={busy}
+          onClick={onBackupSettings}
+        >
+          Backup settings
         </button>
       </ActionMenu>
       <div id={hintId} role="tooltip" className="save-details-tooltip">

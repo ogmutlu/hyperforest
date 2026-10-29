@@ -5,6 +5,8 @@ import { desktopEnabled } from "./desktop";
 import type { Action, GoalNode } from "./model";
 import { Icon } from "./icons";
 import { isWebsite } from "./vertices";
+import { HabitHistory } from "./HabitHistory";
+import { ReadingProgress } from "./ReadingProgress";
 
 export function VertexDetails({
   node,
@@ -21,12 +23,17 @@ export function VertexDetails({
 }) {
   const [error, setError] = useState("");
   const vertex = node.vertex;
-  if (!vertex || vertex.kind === "vanilla" || vertex.kind === "thought")
-    return null;
+  if (!vertex || vertex.kind === "vanilla") return null;
   const finished = node.finishedAt !== undefined;
   return (
     <div className={`vertex-details vertex-details-${vertex.kind}`}>
       <Icon name={vertex.kind} size={18} />
+      {vertex.kind === "thought" && (
+        <button className="quiet-button" disabled={busy} onClick={configure}>
+          <Icon name="pencil" size={14} />{" "}
+          {finished ? "View thought" : "Edit thought"}
+        </button>
+      )}
       {vertex.kind === "deadline" && (
         <>
           <time
@@ -75,6 +82,16 @@ export function VertexDetails({
                 Open this file from the desktop app.
               </span>
             ))}
+          {editing && !finished && (
+            <button
+              className="quiet-button vertex-configure"
+              disabled={busy}
+              onClick={configure}
+            >
+              <Icon name="pencil" size={14} /> Edit attachment
+            </button>
+          )}
+          <ReadingProgress node={node} vertex={vertex} busy={busy} run={run} />
         </>
       )}
       {vertex.kind === "habit" && (
@@ -103,24 +120,24 @@ export function VertexDetails({
               void run({ type: "recordHabit", id: node.id, undo: true });
             }}
           >
-            <Icon name="history" size={16} />
+            <Icon name="undo" size={16} />
           </button>
+          <HabitHistory completions={vertex.completions} />
         </>
       )}
-      {editing && !finished && (
-        <button
-          className="quiet-button vertex-configure"
-          disabled={busy}
-          onClick={configure}
-        >
-          <Icon name="pencil" size={14} />{" "}
-          {vertex.kind === "deadline"
-            ? "Edit deadline"
-            : vertex.kind === "habit"
-              ? "Edit frequency"
-              : "Edit attachment"}
-        </button>
-      )}
+      {editing &&
+        !finished &&
+        vertex.kind !== "thought" &&
+        vertex.kind !== "reading" && (
+          <button
+            className="quiet-button vertex-configure"
+            disabled={busy}
+            onClick={configure}
+          >
+            <Icon name="pencil" size={14} />{" "}
+            {vertex.kind === "deadline" ? "Edit deadline" : "Edit frequency"}
+          </button>
+        )}
       {error && (
         <p className="inline-error" role="alert">
           {error}

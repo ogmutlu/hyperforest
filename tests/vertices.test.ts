@@ -2,7 +2,13 @@ import { describe, expect, it } from "vitest";
 import { apply, totals, validateState } from "../src/domainClient";
 import { archiveBackup, exportArchive } from "../src/export";
 import type { State, VertexSettings } from "../src/model";
-import { habitProgress, thoughtLines, vertexGeometry } from "../src/vertices";
+import {
+  habitProgress,
+  thoughtLines,
+  thoughtPreview,
+  thoughtTitle,
+  vertexGeometry,
+} from "../src/vertices";
 import { sampleWorkspace } from "./sampleWorkspace";
 
 const settings: VertexSettings[] = [
@@ -16,6 +22,99 @@ const find = (state: State, id: string) =>
   state.nodes.find((node) => node.id === id)!;
 
 describe("vertex kinds", () => {
+  it("keeps full thought text while editing a short domain title and transferring archives", () => {
+    const text = "A thought with enough words to need a short heading. ".repeat(
+      30,
+    );
+    let state = apply(
+      sampleWorkspace(1000),
+      {
+        type: "isolate",
+        id: "thought",
+        treeId: "project",
+        title: thoughtTitle(text),
+        vertex: { kind: "thought", text },
+      },
+      1000,
+    );
+    expect(thoughtPreview(find(state, "thought"))).toHaveLength(130);
+    expect(thoughtPreview(find(state, "thought"))).toMatch(/\.\.\.$/);
+    const revised =
+      "Changed thoughts still preserve all of their words. ".repeat(40);
+    state = apply(
+      state,
+      {
+        type: "configureVertex",
+        id: "thought",
+        vertex: { kind: "thought", text: revised },
+      },
+      2000,
+    );
+    expect(find(state, "thought")).toMatchObject({
+      title: thoughtTitle(revised),
+      vertex: { text: revised },
+    });
+    const restored = JSON.parse(
+      archiveBackup(exportArchive(state, 3000)),
+    ) as State;
+    expect(find(restored, "thought")).toMatchObject(find(state, "thought"));
+  });
+
+  it("persists reading percentage and pages through configuration and archive transfer", () => {
+    let state = apply(
+      sampleWorkspace(1000),
+      {
+        type: "add",
+        id: "reading",
+        parentId: "project",
+        title: "A book",
+        vertex: {
+          kind: "reading",
+          resource: "",
+          totalPages: 200,
+          pagesRead: 50,
+          progressPercent: 25,
+        },
+      },
+      1000,
+    );
+    state = apply(
+      state,
+      {
+        type: "configureVertex",
+        id: "reading",
+        vertex: {
+          kind: "reading",
+          resource: "https://example.org/book",
+          totalPages: 200,
+          pagesRead: 80,
+          progressPercent: 40,
+        },
+      },
+      2000,
+    );
+    const restored = JSON.parse(
+      archiveBackup(exportArchive(state, 3000)),
+    ) as State;
+    expect(find(restored, "reading").vertex).toEqual(
+      find(state, "reading").vertex,
+    );
+    for (const vertex of [
+      { kind: "reading", resource: "", progressPercent: 101 },
+      { kind: "reading", resource: "", totalPages: 0 },
+      { kind: "reading", resource: "", totalPages: 20, pagesRead: 21 },
+      { kind: "reading", resource: "", pagesRead: -1 },
+      { kind: "thought", text: " " },
+    ])
+      expect(() =>
+        validateState({
+          ...state,
+          nodes: state.nodes.map((node) =>
+            node.id === "reading" ? { ...node, vertex } : node,
+          ),
+        }),
+      ).toThrow();
+  });
   it.each(settings)(
     "$kind retains shared graph and focus behavior and its metadata",
     (vertex) => {

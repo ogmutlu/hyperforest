@@ -1,7 +1,15 @@
 import { GraphVertex } from "./GraphVertex";
 import { GraphEdge } from "./GraphEdge";
 import { useFrameState } from "./useFrameState";
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  memo,
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import type { PointerEvent as ReactPointerEvent } from "react";
 import type { Action, GoalNode, State } from "./model";
 import { Icon } from "./icons";
@@ -14,8 +22,10 @@ interface Props {
   selected: string | null;
   time: Map<string, number>;
   select: (id: string) => void;
+  openThought: (id: string) => void;
   start: (id: string, point: { x: number; y: number }) => Promise<void>;
   run: (action: Action) => Promise<boolean>;
+  rememberSize?: boolean;
 }
 interface Drag {
   id: string | null;
@@ -32,11 +42,45 @@ export const Graph = memo(function Graph({
   selected,
   time,
   select,
+  openThought,
   start,
   run,
+  rememberSize = true,
 }: Props) {
+  const container = useRef<HTMLDivElement>(null);
+  const [initialHeight] = useState(() => {
+    if (!rememberSize) return undefined;
+    try {
+      const height = Number(localStorage.getItem("hyperforest.graph-height"));
+      return Number.isFinite(height) && height >= 530 ? height : undefined;
+    } catch {
+      return undefined;
+    }
+  });
+  useEffect(() => {
+    const element = container.current;
+    if (!rememberSize || !element) return;
+    let previous = initialHeight;
+    const observer = new ResizeObserver(() => {
+      // Native CSS resizing writes an inline height. Responsive default heights
+      // do not, and must not overwrite the user's explicit preference.
+      if (!element.style.height) return;
+      const height = element.getBoundingClientRect().height;
+      if (!Number.isFinite(height) || height < 530 || height === previous)
+        return;
+      try {
+        localStorage.setItem("hyperforest.graph-height", String(height));
+        previous = height;
+      } catch {
+        // Resizing remains available when device preference storage is blocked.
+      }
+    });
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, [initialHeight, rememberSize]);
   const svg = useRef<SVGSVGElement>(null);
   const drag = useRef<Drag | null>(null);
+  const dragged = useRef(false);
   const [link, setLink, flushLink, latestLink] = useFrameState<{
     id: string;
     x: number;
@@ -75,7 +119,42 @@ export const Graph = memo(function Graph({
     small: boolean,
   ): { x: number; y: number; scale: number } =>
     small ? { x: 264, y: 172.8, scale: 0.52 } : { x: 0, y: 0, scale: 1 };
-  const [camera, setCamera, , latestCamera] = useFrameState(fitCamera(compact));
+  const [camera, setCamera, flushCamera, latestCamera] = useFrameState(
+    fitCamera(compact),
+  );
+  const root = useRef<GoalNode | undefined>(undefined);
+  root.current = state.nodes.find((node) => node.id === treeId);
+  const centerRoot = useCallback(
+    (small: boolean) => {
+      const element = svg.current;
+      const node = root.current;
+      const matrix = element?.getScreenCTM();
+      if (!element || !node || !matrix) return;
+      const bounds = element.getBoundingClientRect();
+      if (!bounds.width || !bounds.height) return;
+      const scale = small ? 0.52 : 1;
+      const padding = Math.max(
+        80,
+        vertexGeometry(node).ry * scale * matrix.d + 24,
+      );
+      // Convert the visible viewport anchor, including SVG letterboxing/cropping,
+      // into camera coordinates. Saved vertex coordinates remain unchanged.
+      const anchor = new DOMPoint(
+        bounds.left + bounds.width / 2,
+        bounds.top + padding,
+      ).matrixTransform(matrix.inverse());
+      setCamera({
+        x: anchor.x - node.x * scale,
+        y: anchor.y - node.y * scale,
+        scale,
+      });
+      flushCamera();
+    },
+    [setCamera, flushCamera],
+  );
+  useLayoutEffect(() => {
+    centerRoot(compact);
+  }, [centerRoot, compact, treeId]);
   useEffect(() => {
     const element = svg.current;
     if (!element) return;
@@ -99,7 +178,6 @@ export const Graph = memo(function Graph({
     const media = window.matchMedia("(max-width: 760px)");
     const changed = (): void => {
       setCompact(media.matches);
-      setCamera(fitCamera(media.matches));
     };
     media.addEventListener("change", changed);
     return () => media.removeEventListener("change", changed);
@@ -166,6 +244,7 @@ export const Graph = memo(function Graph({
   const down = useCallback(
     (event: ReactPointerEvent<SVGElement>, node?: GoalNode): void => {
       if (event.button !== 0) return;
+      dragged.current = false;
       event.stopPropagation();
       if (node && (!editing || node.finishedAt !== undefined)) {
         select(node.id);
@@ -224,6 +303,7 @@ export const Graph = memo(function Graph({
       dy = point.y - current.startY;
     if (Math.abs(dx) + Math.abs(dy) > 3) current.moved = true;
     if (!current.moved) return;
+    dragged.current = true;
     svg.current?.setPointerCapture(event.pointerId);
     setDragging(true);
     beginNavigation();
@@ -268,6 +348,10 @@ export const Graph = memo(function Graph({
   };
   return (
     <div
+      ref={container}
+      style={
+        initialHeight === undefined ? undefined : { height: initialHeight }
+      }
       className={`graph ${navigating && nodes.length > 150 ? "is-navigating" : ""} ${editing ? "editing" : "frozen"} ${dragging ? "is-dragging" : ""}`}
     >
       <div className="canvas-grain" />
@@ -342,6 +426,9 @@ export const Graph = memo(function Graph({
               down={down}
               linkDown={linkDown}
               select={select}
+              openThought={(id, keyboard) => {
+                if (keyboard || !dragged.current) openThought(id);
+              }}
               start={start}
             />
           ))}

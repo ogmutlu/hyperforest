@@ -22,9 +22,18 @@ pub enum Vertex {
     Deadline {
         deadline_at: u64,
     },
-    Thought,
+    Thought {
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        text: Option<String>,
+    },
     Reading {
         resource: String,
+        #[serde(default, skip_serializing_if = "is_zero")]
+        progress_percent: f64,
+        #[serde(default, skip_serializing_if = "is_zero_pages")]
+        pages_read: u32,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        total_pages: Option<u32>,
     },
     Habit {
         frequency: u16,
@@ -32,6 +41,13 @@ pub enum Vertex {
         #[serde(default)]
         completions: Vec<u64>,
     },
+}
+
+fn is_zero(value: &f64) -> bool {
+    *value == 0.0
+}
+fn is_zero_pages(value: &u32) -> bool {
+    *value == 0
 }
 
 impl Vertex {
@@ -51,7 +67,27 @@ impl Vertex {
                     return Err("Choose a valid deadline date and time.".into());
                 }
             }
-            Self::Reading { resource } => validate_resource(resource)?,
+            Self::Thought { text: Some(text) } => {
+                if text.trim().is_empty() || text.chars().count() > 20_000 {
+                    return Err("Write a thought of 1 to 20000 characters.".into());
+                }
+            }
+            Self::Reading {
+                resource,
+                progress_percent,
+                pages_read,
+                total_pages,
+            } => {
+                validate_resource(resource)?;
+                if !progress_percent.is_finite() || !(0.0..=100.0).contains(progress_percent) {
+                    return Err("Reading progress must be between 0 and 100 percent.".into());
+                }
+                if total_pages.is_some_and(|total| total == 0 || *pages_read > total) {
+                    return Err(
+                        "Pages read must be between zero and the total number of pages.".into(),
+                    );
+                }
+            }
             Self::Habit {
                 frequency,
                 completions,
@@ -156,7 +192,7 @@ pub fn place_new(mut document: Document, id: &str, parent_id: &str) -> Result<Do
         score(a).total_cmp(&score(b))
     });
     let width = |vertex: &Vertex| {
-        if matches!(vertex, Vertex::Thought) {
+        if matches!(vertex, Vertex::Thought { .. }) {
             180.0
         } else {
             90.0

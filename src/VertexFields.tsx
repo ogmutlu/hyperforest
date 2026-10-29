@@ -16,6 +16,24 @@ export function VertexFields({
 }) {
   const [error, setError] = useState("");
   switch (value.kind) {
+    case "thought":
+      return (
+        <label>
+          Thought text
+          <textarea
+            autoFocus
+            aria-label="Thought text"
+            rows={12}
+            required
+            maxLength={20000}
+            disabled={disabled}
+            value={value.text ?? ""}
+            onChange={(event) =>
+              onChange({ ...value, text: event.target.value })
+            }
+          />
+        </label>
+      );
     case "deadline":
       return (
         <label>

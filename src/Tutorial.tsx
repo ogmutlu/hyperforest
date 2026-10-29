@@ -16,17 +16,18 @@ const lessons = [
     title: "Create your first vertex",
     instruction:
       "Choose the vanilla symbol in the right column, give your vertex a name, and create it.",
-    hint: "New vertices start isolated. Creating one also turns on Edit graph so you can arrange it immediately.",
+    hint: "New vertices are children of the selected vertex. The parent stays selected; click your new vertex to arrange it.",
   },
   {
     title: "Move it into place",
-    instruction: "Drag your new vertex a little across the canvas.",
+    instruction:
+      "Select your new vertex, then drag it a little across the canvas.",
     hint: "Drag the vertex itself, rather than the small connection handle above it. Other vertices keep their positions.",
   },
   {
     title: "Make a connection",
     instruction:
-      "Drag the small handle above your vertex onto the Practice forest root.",
+      "Drag the handle on your vertex’s connecting edge onto the Practice forest root.",
     hint: "Connections are optional. They make focus time flow up to a parent. Dropping an edge handle on empty space disconnects it.",
   },
   {
@@ -58,7 +59,7 @@ const lessons = [
   },
   {
     title: "Count one repetition",
-    instruction: "Choose Record repetition for your new habit.",
+    instruction: "Select your new habit, then choose Record repetition.",
     hint: "The counter shows this period's progress and your lifetime total. Undo removes the last repetition; editing frequency keeps your history.",
   },
   {
@@ -70,7 +71,7 @@ const lessons = [
   {
     title: "Capture a short thought",
     instruction:
-      "Choose the thought symbol and create a vertex with a short thought as its name.",
+      "Choose the thought symbol and create a vertex with your thought as its text.",
     hint: "The oval adapts to the text. Thought vertices also support notes, focus, dragging, and connections.",
   },
   {
@@ -141,7 +142,7 @@ function advance(progress: Progress, action: Action, state: State): Progress {
   switch (progress.step) {
     case 0:
       if (
-        action.type === "isolate" &&
+        (action.type === "isolate" || action.type === "add") &&
         (!action.vertex || action.vertex.kind === "vanilla")
       )
         return { ...next(), vertexId: action.id };
@@ -185,7 +186,10 @@ function advance(progress: Progress, action: Action, state: State): Progress {
         return next();
       break;
     case 7:
-      if (action.type === "isolate" && action.vertex?.kind === "habit")
+      if (
+        (action.type === "isolate" || action.type === "add") &&
+        action.vertex?.kind === "habit"
+      )
         return { ...next(), habitId: action.id };
       break;
     case 8:
@@ -197,15 +201,24 @@ function advance(progress: Progress, action: Action, state: State): Progress {
         return next();
       break;
     case 9:
-      if (action.type === "isolate" && action.vertex?.kind === "deadline")
+      if (
+        (action.type === "isolate" || action.type === "add") &&
+        action.vertex?.kind === "deadline"
+      )
         return next();
       break;
     case 10:
-      if (action.type === "isolate" && action.vertex?.kind === "thought")
+      if (
+        (action.type === "isolate" || action.type === "add") &&
+        action.vertex?.kind === "thought"
+      )
         return next();
       break;
     case 11:
-      if (action.type === "isolate" && action.vertex?.kind === "reading")
+      if (
+        (action.type === "isolate" || action.type === "add") &&
+        action.vertex?.kind === "reading"
+      )
         return {
           ...(action.vertex.resource.trim() ? next() : progress),
           readingId: action.id,
@@ -250,7 +263,10 @@ function targetSelectors(progress: Progress): string[] {
     case 7:
       return ['[aria-label="Create habit vertex"]'];
     case 8:
-      return [".vertex-details-habit > .quiet-button"];
+      return [
+        '[aria-label="Habit history"]',
+        ".vertex-details-habit > .quiet-button",
+      ];
     case 9:
       return ['[aria-label="Create deadline vertex"]'];
     case 10:

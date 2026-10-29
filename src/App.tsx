@@ -5,7 +5,12 @@ import { ActionMenu } from "./ActionMenu";
 import { TutorialButton } from "./TutorialContext";
 import { VertexFields } from "./VertexFields";
 import { VertexDetails } from "./VertexDetails";
-import { defaultVertex, VERTEX_KINDS } from "./vertices";
+import {
+  defaultVertex,
+  thoughtText,
+  thoughtTitle,
+  VERTEX_KINDS,
+} from "./vertices";
 import {
   createContext,
   useCallback,
@@ -44,7 +49,7 @@ function download(name: string, text: string, type = "application/json"): void {
 }
 const ErrorContext = createContext("");
 
-function Dialog({
+export function Dialog({
   children,
   close,
   label,
@@ -102,11 +107,13 @@ function NodeName({
   editing,
   busy,
   run,
+  openThought,
 }: {
   node: GoalNode;
   editing: boolean;
   busy: boolean;
   run: (action: Action) => Promise<boolean>;
+  openThought: () => void;
 }) {
   const [renaming, setRenaming] = useState(false);
   const [name, setName] = useState(node.title);
@@ -119,15 +126,30 @@ function NodeName({
       <h2 className="node-heading">
         <button
           className="rename-name"
-          aria-label="Rename selected vertex"
-          disabled={!editing || busy || node.finishedAt !== undefined}
+          title={node.title}
+          aria-label={
+            node.vertex?.kind === "thought"
+              ? "Edit selected thought"
+              : "Rename selected vertex"
+          }
+          disabled={
+            (!editing && node.vertex?.kind !== "thought") ||
+            busy ||
+            node.finishedAt !== undefined
+          }
           onClick={() => {
+            if (node.vertex?.kind === "thought") {
+              openThought();
+              return;
+            }
             original.current = node;
             setName(node.title);
             setRenaming(true);
           }}
         >
-          {node.title}
+          {node.vertex?.kind === "thought"
+            ? thoughtTitle(thoughtText(node))
+            : node.title}
           <Icon
             name="pencil"
             size={14}
@@ -247,7 +269,7 @@ function EditDialog({
           Goal name
           <input
             autoFocus
-            disabled={!editing}
+            disabled={!editing || node.vertex?.kind === "thought"}
             value={title}
             onChange={(event) => setTitle(event.target.value)}
             maxLength={100}
@@ -339,8 +361,30 @@ export function App({
   >(null);
   const [pendingImport, setPendingImport] = useState<State | null>(null);
   const [editing, setEditing] = useState(false);
+  const [panelPosition, setPanelPosition] = useState<"top" | "left" | null>(
+    () => {
+      if (practice) return "top";
+      try {
+        const saved = localStorage.getItem("hyperforest.panel-position");
+        return saved === "left" || saved === "top" ? saved : null;
+      } catch {
+        return null;
+      }
+    },
+  );
+  const [widePanel, setWidePanel] = useState(
+    () => window.matchMedia("(min-width: 1001px)").matches,
+  );
+  useEffect(() => {
+    const media = window.matchMedia("(min-width: 1001px)");
+    const changed = () => setWidePanel(media.matches);
+    media.addEventListener("change", changed);
+    return () => media.removeEventListener("change", changed);
+  }, []);
+  const selectedPanelPosition = panelPosition ?? (widePanel ? "left" : "top");
   const [newName, setNewName] = useState("");
   const newNameInput = useRef<HTMLInputElement>(null);
+  const newThoughtInput = useRef<HTMLTextAreaElement>(null);
   const [newVertex, setNewVertex] = useState<VertexSettings>({
     kind: "vanilla",
   });
@@ -348,6 +392,7 @@ export function App({
     kind: "vanilla",
   });
   const [linkedTreeId, setLinkedTreeId] = useState("");
+  const [newParentId, setNewParentId] = useState("");
   const [customColor, setCustomColor] = useState("#dfc491");
   const importInput = useRef<HTMLInputElement>(null);
   const tree = state.trees.find((item) => item.id === treeId) ?? state.trees[0];
@@ -442,20 +487,36 @@ export function App({
         setSelected(id);
         setDialog(null);
       }
-    } else if (
-      tree &&
-      (await run({
-        type: "isolate",
-        id,
-        treeId: tree.id,
-        title: newName,
-        vertex: newVertex,
-        ...(linkedTreeId ? { linkedTreeId } : {}),
-      }))
-    ) {
-      setSelected(id);
-      setEditing(true);
-      setDialog(null);
+    } else if (tree && node) {
+      const thought = newVertex.kind === "thought";
+      const title = thought ? thoughtTitle(newName) : newName;
+      const vertex = thought
+        ? { kind: "thought" as const, text: newName.trim() }
+        : newVertex;
+      const action: Action = thought
+        ? { type: "isolate", id, treeId: tree.id, title, vertex }
+        : newParentId
+          ? {
+              type: "add",
+              id,
+              parentId: newParentId,
+              title,
+              vertex,
+              ...(linkedTreeId ? { linkedTreeId } : {}),
+            }
+          : {
+              type: "isolate",
+              id,
+              treeId: tree.id,
+              title,
+              vertex,
+              ...(linkedTreeId ? { linkedTreeId } : {}),
+            };
+      if (await run(action)) {
+        setSelected(thought ? node.id : newParentId || node.id);
+        setEditing(true);
+        setDialog(null);
+      }
     }
   };
   const prepareImport = (contents: Uint8Array): void => {
@@ -649,7 +710,9 @@ export function App({
           ))}
         </nav>
         {tree && node ? (
-          <div className="workspace">
+          <div
+            className={`workspace${selectedPanelPosition === "left" ? " inspector-left" : ""}`}
+          >
             <aside
               className="inspector"
               data-editing={editing}
@@ -663,6 +726,13 @@ export function App({
                     editing={editing && node.finishedAt === undefined}
                     busy={busy}
                     run={run}
+                    openThought={() => {
+                      setVertexSettings({
+                        kind: "thought",
+                        text: thoughtText(node),
+                      });
+                      setDialog("vertex");
+                    }}
                   />
                   <div className="time-stat">
                     <span>{shortTime(time.get(node.id) ?? 0)}</span>
@@ -693,54 +763,24 @@ export function App({
                   </button>
                 </div>
               </div>
-              {editing && (
-                <div className="edit-toolbar" aria-label="Graph editing">
-                  <button
-                    className="quiet-button"
-                    aria-label="Vertex color"
-                    disabled={busy || node.finishedAt !== undefined}
-                    onClick={() => {
-                      setCustomColor(color);
-                      setDialog("color");
-                    }}
-                  >
-                    Vertex color
-                  </button>
-                  <button
-                    className="quiet-button"
-                    disabled={
-                      busy ||
-                      node.id === node.treeId ||
-                      node.finishedAt !== undefined
-                    }
-                    onClick={() => setDialog("complete")}
-                  >
-                    <Icon name="check" size={16} /> Finish goal
-                  </button>
-                  <button
-                    className="quiet-button danger"
-                    disabled={busy || node.finishedAt !== undefined}
-                    onClick={() => setDialog("delete")}
-                  >
-                    <Icon name="trash" size={16} />{" "}
-                    {node.id === node.treeId
-                      ? "Delete hypertree"
-                      : "Delete subtree"}
-                  </button>
-                </div>
-              )}
 
-              <VertexDetails
-                key={node.id}
-                node={node}
-                busy={busy}
-                editing={editing}
-                run={run}
-                configure={() => {
-                  setVertexSettings(node.vertex ?? { kind: "vanilla" });
-                  setDialog("vertex");
-                }}
-              />
+              <div className="vertex-details-slot">
+                <VertexDetails
+                  key={node.id}
+                  node={node}
+                  busy={busy}
+                  editing={editing}
+                  run={run}
+                  configure={() => {
+                    setVertexSettings(
+                      node.vertex?.kind === "thought"
+                        ? { kind: "thought", text: thoughtText(node) }
+                        : (node.vertex ?? { kind: "vanilla" }),
+                    );
+                    setDialog("vertex");
+                  }}
+                />
+              </div>
 
               <div className="child-list" aria-label="Child vertices">
                 {children.length ? (
@@ -765,15 +805,77 @@ export function App({
             <section className="map-panel">
               <Graph
                 key={tree.id}
+                rememberSize={!practice}
                 editing={editing}
                 state={state}
                 treeId={tree.id}
                 selected={node.id}
                 time={time}
                 select={setSelected}
+                openThought={(id) => {
+                  const thought = state.nodes.find((item) => item.id === id);
+                  if (!thought) return;
+                  setSelected(id);
+                  setVertexSettings({
+                    kind: "thought",
+                    text: thoughtText(thought),
+                  });
+                  setDialog("vertex");
+                }}
                 start={start}
                 run={run}
               />
+              {editing && (
+                <nav className="vertex-action-tools" aria-label="Graph editing">
+                  <button
+                    className="graph-tool-button"
+                    aria-label="Vertex color"
+                    disabled={busy || node.finishedAt !== undefined}
+                    onClick={() => {
+                      setCustomColor(color);
+                      setDialog("color");
+                    }}
+                  >
+                    <Icon name="palette" size={22} />
+                    <span className="graph-tool-tooltip" aria-hidden="true">
+                      Vertex color
+                    </span>
+                  </button>
+                  <button
+                    className="graph-tool-button"
+                    aria-label="Finish goal"
+                    disabled={
+                      busy ||
+                      node.id === node.treeId ||
+                      node.finishedAt !== undefined
+                    }
+                    onClick={() => setDialog("complete")}
+                  >
+                    <Icon name="check" size={22} />
+                    <span className="graph-tool-tooltip" aria-hidden="true">
+                      Finish subgoal
+                    </span>
+                  </button>
+                  <button
+                    className="graph-tool-button danger"
+                    aria-label={
+                      node.id === node.treeId
+                        ? "Delete hypertree"
+                        : "Delete subtree"
+                    }
+                    disabled={busy || node.finishedAt !== undefined}
+                    onClick={() => setDialog("delete")}
+                  >
+                    <Icon name="trash" size={22} />
+                    <span className="graph-tool-tooltip" aria-hidden="true">
+                      {node.id === node.treeId
+                        ? "Delete hypertree"
+                        : "Delete subtree"}
+                    </span>
+                  </button>
+                </nav>
+              )}
+
               <nav className="graph-tools" aria-label="Graph tools">
                 <div
                   className="graph-tool-group"
@@ -818,6 +920,9 @@ export function App({
                         setNewName("");
                         setLinkedTreeId("");
                         setNewVertex(defaultVertex(kind));
+                        setNewParentId(
+                          node.finishedAt === undefined ? node.id : tree.id,
+                        );
                         setError("");
                         setDialog("child");
                       }}
@@ -880,6 +985,41 @@ export function App({
         {dialog === "options" && tree && (
           <Dialog close={() => setDialog(null)} label="Graph options">
             <h2>Options</h2>
+            <label>
+              Selected vertex panel
+              <select
+                aria-label="Selected vertex panel"
+                value={panelPosition ?? "auto"}
+                onChange={(event) => {
+                  const position =
+                    event.target.value === "left"
+                      ? "left"
+                      : event.target.value === "top"
+                        ? "top"
+                        : null;
+                  setPanelPosition(position);
+                  if (!practice) {
+                    try {
+                      if (position === null)
+                        localStorage.removeItem("hyperforest.panel-position");
+                      else
+                        localStorage.setItem(
+                          "hyperforest.panel-position",
+                          position,
+                        );
+                    } catch {
+                      setError(
+                        "Could not remember the panel position on this device.",
+                      );
+                    }
+                  }
+                }}
+              >
+                <option value="auto">Automatic (screen size)</option>
+                <option value="top">Above the graph</option>
+                <option value="left">Left of the graph</option>
+              </select>
+            </label>
             <div className="graph-options-controls">
               <div className="option-info-control">
                 <button
@@ -1008,7 +1148,12 @@ export function App({
         {(dialog === "tree" || dialog === "child") && (
           <Dialog
             close={() => setDialog(null)}
-            initialFocus={newNameInput}
+            initialFocus={
+              dialog === "child" && newVertex.kind === "thought"
+                ? newThoughtInput
+                : newNameInput
+            }
+            className="creation-dialog"
             label={
               dialog === "tree"
                 ? "Create hypertree"
@@ -1032,75 +1177,128 @@ export function App({
                 void create(event);
               }}
             >
-              {dialog === "child" && tree?.pedantic && (
-                <p className="creation-hint">
-                  Turn off pedantic in Options to create an isolated vertex.
-                  Connect it before enabling pedantic again.
-                </p>
-              )}
-              {dialog === "child" && node && (
-                <label>
-                  Link another hypertree
-                  <select
-                    aria-label="Link another hypertree"
-                    value={linkedTreeId}
-                    onChange={(event) => {
-                      setLinkedTreeId(event.target.value);
-                      setNewName(
-                        state.trees.find(
-                          (tree) => tree.id === event.target.value,
-                        )?.title ?? "",
-                      );
-                    }}
-                  >
-                    <option value="">No hypertree link</option>
-                    <optgroup label="Link another hypertree">
-                      {state.trees
-                        .filter((tree) =>
-                          canLinkTree(state, node.treeId, tree.id),
-                        )
-                        .map((tree) => (
-                          <option key={tree.id} value={tree.id}>
-                            {tree.title}
-                          </option>
-                        ))}
-                    </optgroup>
-                  </select>
-                  {linkedTreeId && (
-                    <p>
-                      Its live total contributes to this vertex and its
-                      ancestors. The original hypertree stays in its own tab.
-                    </p>
-                  )}
-                </label>
-              )}
-              <label>
-                {dialog === "tree" ? "Hypertree name" : "Goal name"}
-                <input
-                  ref={newNameInput}
-                  autoFocus
-                  required
-                  maxLength={100}
-                  value={newName}
-                  onChange={(event) => setNewName(event.target.value)}
-                  placeholder={
-                    dialog === "tree"
-                      ? "A project, a practice, a possibility…"
-                      : undefined
-                  }
-                />
+              {dialog === "child" &&
+                newVertex.kind === "thought" &&
+                tree?.pedantic && (
+                  <p className="creation-hint">
+                    Turn off pedantic in Options to create an isolated vertex.
+                    Connect it before enabling pedantic again.
+                  </p>
+                )}
+              <label className="creation-name">
+                {dialog === "tree"
+                  ? "Hypertree name"
+                  : newVertex.kind === "thought"
+                    ? "Thought text"
+                    : "Goal name"}
+                {dialog === "child" && newVertex.kind === "thought" ? (
+                  <textarea
+                    ref={newThoughtInput}
+                    autoFocus
+                    required
+                    maxLength={20000}
+                    rows={7}
+                    value={newName}
+                    onChange={(event) => setNewName(event.target.value)}
+                  />
+                ) : (
+                  <input
+                    ref={newNameInput}
+                    autoFocus
+                    required
+                    maxLength={100}
+                    value={newName}
+                    onChange={(event) => setNewName(event.target.value)}
+                    placeholder={
+                      dialog === "tree"
+                        ? "A project, a practice, a possibility…"
+                        : undefined
+                    }
+                  />
+                )}
               </label>
-              {dialog === "child" && (
+              {dialog === "child" && newVertex.kind !== "thought" && (
                 <VertexFields
                   value={newVertex}
                   onChange={setNewVertex}
                   disabled={busy}
                 />
               )}
+              {dialog === "child" && newVertex.kind !== "thought" && node && (
+                <div className="creation-links">
+                  <label>
+                    Parent vertex
+                    <select
+                      aria-label="Parent vertex"
+                      value={newParentId}
+                      disabled={busy}
+                      onChange={(event) => setNewParentId(event.target.value)}
+                    >
+                      <option value="" disabled={tree?.pedantic}>
+                        No parent (isolated)
+                      </option>
+                      {state.nodes
+                        .filter(
+                          (item) =>
+                            item.treeId === tree?.id &&
+                            item.finishedAt === undefined,
+                        )
+                        .map((item) => (
+                          <option key={item.id} value={item.id}>
+                            {item.title}
+                          </option>
+                        ))}
+                    </select>
+                  </label>
+                  <label>
+                    Link another hypertree
+                    <select
+                      aria-label="Link another hypertree"
+                      value={linkedTreeId}
+                      onChange={(event) => {
+                        setLinkedTreeId(event.target.value);
+                        const previousLink = state.trees.find(
+                          (item) => item.id === linkedTreeId,
+                        );
+                        const nextLink = state.trees.find(
+                          (item) => item.id === event.target.value,
+                        );
+                        if (!newName.trim() || newName === previousLink?.title)
+                          setNewName(nextLink?.title ?? "");
+                      }}
+                    >
+                      <option value="">No hypertree link</option>
+                      <optgroup label="Link another hypertree">
+                        {state.trees
+                          .filter((tree) =>
+                            canLinkTree(state, node.treeId, tree.id),
+                          )
+                          .map((tree) => (
+                            <option key={tree.id} value={tree.id}>
+                              {tree.title}
+                            </option>
+                          ))}
+                      </optgroup>
+                    </select>
+                    {linkedTreeId && (
+                      <p>
+                        Its live total contributes to this vertex and its
+                        ancestors. The original hypertree stays in its own tab.
+                      </p>
+                    )}
+                  </label>
+                </div>
+              )}
               <button
                 className="primary-button"
                 type="submit"
-                disabled={busy || (dialog === "child" && tree?.pedantic)}
+                disabled={
+                  busy ||
+                  (dialog === "child" &&
+                    (newVertex.kind === "thought"
+                      ? tree?.pedantic
+                      : !newParentId && tree?.pedantic))
+                }
               >
                 {dialog === "tree" ? "Create hypertree" : "Create vertex"}
                 <Icon name="plus" />
@@ -1109,7 +1307,13 @@ export function App({
           </Dialog>
         )}
         {dialog === "vertex" && node && (
-          <Dialog close={() => setDialog(null)} label="Vertex settings">
+          <Dialog
+            close={() => setDialog(null)}
+            label="Vertex settings"
+            className={
+              vertexSettings.kind === "thought" ? "thought-editor" : ""
+            }
+          >
             <h2>{node.title}</h2>
             <form
               onSubmit={(event) => {
@@ -1126,9 +1330,13 @@ export function App({
               <VertexFields
                 value={vertexSettings}
                 onChange={setVertexSettings}
-                disabled={busy}
+                disabled={busy || node.finishedAt !== undefined}
               />
-              <button className="primary-button" type="submit" disabled={busy}>
+              <button
+                className="primary-button"
+                type="submit"
+                disabled={busy || node.finishedAt !== undefined}
+              >
                 Save settings <Icon name="check" />
               </button>
             </form>
@@ -1396,7 +1604,7 @@ export function App({
             <h2>Clear everything on this device?</h2>
             <p>
               {workspace instanceof DesktopWorkspace
-                ? "This clears the current workspace in your data directory. Markdown files and daily backups remain available for recovery."
+                ? "This clears the current workspace in your data directory. Markdown files and recovery backups remain available for recovery."
                 : "This permanently deletes all hypertrees, vertices, notes, saved sessions, and any active focus session from this browser."}{" "}
               Export a backup first if you want to keep your work.
             </p>

@@ -193,6 +193,19 @@ h2 {
   border-left: 1px solid var(--line);
   background: #121b24;
 }
+.vertex-action-tools {
+  position: absolute;
+  z-index: 5;
+  top: 24px;
+  right: 68px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 4px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #121b24ed;
+}
 .graph-tool-group {
   display: flex;
   flex-direction: column;
@@ -251,13 +264,60 @@ h2 {
   font-size: 12px;
   line-height: 1.6;
 }
+.creation-dialog {
+  width: min(640px, calc(100vw - 32px));
+}
+.creation-name input {
+  min-height: 60px;
+  padding: 14px 16px;
+  font-size: 22px;
+}
+.creation-name textarea {
+  min-height: 160px;
+  font-size: 18px;
+}
+.creation-links {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+  margin-top: 20px;
+}
+.creation-links label {
+  min-width: 0;
+}
+.creation-links select {
+  width: 100%;
+  min-width: 0;
+}
+.dialog .backup-toggle {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 10px;
+}
+.dialog .backup-toggle input {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  padding: 0;
+}
+.dialog .backup-saved {
+  color: #80c9bc;
+  margin: 12px 0;
+  font-size: 12px;
+}
+.backup-settings-dialog .creation-hint {
+  margin: 12px 0;
+  font-size: 12px;
+  line-height: 1.6;
+}
 .vertex-details {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
-  gap: 10px;
-  margin-top: 14px;
-  padding-top: 12px;
+  gap: 4px;
+  margin-top: 4px;
+  padding-top: 4px;
   border-top: 1px solid var(--line);
   color: var(--node-color);
   font-size: 12px;
@@ -266,8 +326,8 @@ h2 {
   flex-shrink: 0;
 }
 .vertex-details .quiet-button {
-  min-height: 32px;
-  padding: 6px 8px;
+  min-height: 26px;
+  padding: 4px 6px;
   text-decoration: none;
 }
 .vertex-detail-muted {
@@ -592,6 +652,11 @@ h2 {
   outline: 2px solid var(--gold) !important;
   outline-offset: 5px;
   filter: drop-shadow(0 0 5px #dfc49155);
+}
+@media (max-width: 1000px) {
+  .reading-resource {
+    max-width: min(140px, 100%);
+  }
 }
 @media (max-width: 850px) {
   .tutorial-shell-body {
@@ -1166,8 +1231,7 @@ button:disabled {
   flex-shrink: 0;
 }
 .top-actions,
-.selection-actions,
-.edit-toolbar {
+.selection-actions {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
@@ -1309,11 +1373,124 @@ button:disabled {
   background: #80c9bc;
 }
 .inspector {
-  padding: 20px 16px 12px;
+  box-sizing: border-box;
+  height: 184px;
+  flex: 0 0 184px;
+  display: grid;
+  grid-template-rows: 58px minmax(0, 1fr) 20px;
+  padding: 8px 16px 6px;
   border-bottom: 1px solid var(--line);
   background: linear-gradient(110deg, #131b2333, transparent);
 }
+.vertex-details-slot {
+  min-height: 0;
+}
+.node-heading .rename-name {
+  display: block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.reading-progress {
+  display: flex;
+  align-items: flex-end;
+  flex-wrap: wrap;
+  gap: 6px;
+  flex-basis: 100%;
+  margin: 0;
+}
+.reading-progress label {
+  display: grid;
+  gap: 2px;
+  margin: 0;
+  color: var(--muted);
+  font-size: 10px;
+}
+.reading-progress input {
+  box-sizing: border-box;
+  width: 70px;
+  min-height: 26px;
+  padding: 3px 5px;
+  font-size: 12px;
+}
+.reading-progress progress {
+  width: 60px;
+  height: 6px;
+  align-self: center;
+  accent-color: var(--gold);
+}
+.habit-history {
+  position: relative;
+  color: var(--muted);
+}
+.habit-history summary {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  list-style: none;
+}
+.habit-history summary::-webkit-details-marker {
+  display: none;
+}
+.habit-calendar {
+  position: absolute;
+  z-index: 20;
+  top: calc(100% + 8px);
+  left: 0;
+  width: 260px;
+  padding: 12px;
+  color: #cbd9df;
+  background: #14212d;
+  border: 1px solid #596a79;
+  border-radius: 8px;
+  box-shadow: 0 12px 32px #0008;
+}
+.habit-calendar-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+.habit-days {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 4px;
+  text-align: center;
+}
+.habit-days small {
+  padding: 4px 0;
+  color: var(--muted);
+}
+.habit-day {
+  display: grid;
+  place-items: center;
+  min-height: 28px;
+  border: 1px solid #ffffff12;
+  border-radius: 4px;
+}
+.habit-day.completed {
+  background: #308562;
+  border-color: #62c690;
+  color: #fff;
+}
+.habit-calendar p {
+  margin: 10px 0 0;
+  font-size: 10px;
+}
+.thought-editor {
+  width: min(800px, calc(100vw - 32px));
+}
+.thought-editor textarea {
+  min-height: 280px;
+  resize: vertical;
+}
+.goal[data-vertex-kind="thought"] .node-title {
+  cursor: text;
+}
 .inspector-summary {
+  min-width: 0;
   display: flex;
   align-items: center;
   gap: 24px;
@@ -1325,8 +1502,8 @@ button:disabled {
 .node-heading {
   margin: 0;
   color: #e1e4e3;
-  font-size: 28px;
-  line-height: 1.4;
+  font-size: 24px;
+  line-height: 1.2;
 }
 .selection-actions {
   flex: 0 0 auto;
@@ -1356,12 +1533,6 @@ button:disabled {
 .time-label {
   color: var(--muted);
 }
-.edit-toolbar {
-  justify-content: flex-end;
-  margin-top: 12px;
-  padding-top: 8px;
-  border-top: 1px solid var(--line);
-}
 .selection-actions [aria-pressed="true"] {
   color: var(--gold);
 }
@@ -1369,12 +1540,12 @@ button:disabled {
   display: flex;
   gap: 8px;
   overflow-x: auto;
-  margin-top: 12px;
-  padding-bottom: 4px;
+  margin-top: 0;
+  padding-bottom: 0;
 }
 .child-list > button {
   flex-shrink: 0;
-  padding: 5px 8px;
+  padding: 2px 8px;
   border: 1px solid var(--line);
   border-radius: 5px;
   background: none;
@@ -1382,6 +1553,7 @@ button:disabled {
   font-size: 11px;
 }
 .child-list small {
+  flex-shrink: 0;
   color: var(--muted);
 }
 .no-children {
@@ -1587,7 +1759,68 @@ button:disabled {
     display: none;
   }
 }
+@media (min-width: 851px) {
+  .vertex-details-reading {
+    display: grid;
+    grid-template-columns: 18px minmax(0, 1fr) auto auto;
+  }
+  .vertex-details-reading .reading-resource {
+    max-width: 100%;
+  }
+  .vertex-details-reading .vertex-configure {
+    grid-column: 4;
+  }
+  .vertex-details-reading .reading-progress,
+  .vertex-details-reading .inline-error {
+    grid-column: 1 / -1;
+  }
+}
+@media (min-width: 1001px) {
+  .inspector {
+    height: 112px;
+    flex-basis: 112px;
+    grid-template-columns: minmax(400px, 1fr) minmax(0, 1.2fr);
+    grid-template-rows: minmax(0, 1fr) 20px;
+    column-gap: 24px;
+  }
+  .inspector-summary {
+    grid-column: 1;
+    grid-row: 1;
+    flex-direction: row;
+    align-items: flex-start;
+    gap: 16px;
+  }
+  .inspector-summary .selection-details {
+    flex: 1;
+    min-width: 0;
+  }
+  .inspector-summary .selection-actions {
+    justify-content: flex-start;
+  }
+  .vertex-details-slot {
+    grid-column: 2;
+    grid-row: 1;
+    min-width: 0;
+    padding-left: 20px;
+  }
+  .vertex-details-slot:not(:empty) {
+    border-left: 1px solid var(--line);
+  }
+  .vertex-details {
+    margin-top: 0;
+    padding-top: 0;
+    border-top: 0;
+  }
+  .child-list {
+    grid-column: 1 / -1;
+    grid-row: 2;
+  }
+}
 @media (max-width: 850px) {
+  .inspector {
+    height: 184px;
+    flex-basis: 184px;
+  }
   .topbar {
     flex-wrap: wrap;
     gap: 8px;
@@ -1596,8 +1829,6 @@ button:disabled {
     flex: 1;
   }
   .inspector-summary {
-    flex-direction: column;
-    align-items: stretch;
     gap: 12px;
   }
   .selection-actions {
@@ -1605,6 +1836,15 @@ button:disabled {
   }
 }
 @media (max-width: 500px) {
+  .inspector {
+    height: 204px;
+    flex-basis: 204px;
+  }
+  .habit-calendar {
+    left: 0;
+    right: auto;
+    width: 240px;
+  }
   .brand-today {
     gap: 16px;
   }
@@ -1631,7 +1871,24 @@ button:disabled {
     min-width: 90px;
   }
   .node-heading {
-    font-size: 24px;
+    font-size: 21px;
+  }
+  .inspector .start-button {
+    min-width: 72px;
+    padding: 8px;
+  }
+  .inspector .selection-actions {
+    gap: 4px;
+  }
+  .inspector .reading-resource {
+    max-width: 100px;
+  }
+  .inspector .vertex-details-reading .vertex-configure {
+    font-size: 0;
+    gap: 0;
+  }
+  .reading-progress input {
+    width: 70px;
   }
   .focus-dock-summary {
     flex-basis: 100%;
@@ -1959,4 +2216,91 @@ button:disabled {
   display: grid;
   grid-template-columns: minmax(125px, 1fr) minmax(90px, 1fr);
   gap: 8px;
+}
+
+/* A saved alternative to the compact horizontal inspector. */
+.workspace.inspector-left {
+  display: grid;
+  grid-template-columns: clamp(160px, 22vw, 240px) minmax(0, 1fr);
+  align-items: stretch;
+}
+.inspector-left .inspector {
+  display: flex;
+  flex-direction: column;
+  height: auto;
+  flex-basis: auto;
+  min-width: 0;
+  padding: 14px 12px;
+  gap: 14px;
+  border-right: 1px solid var(--line);
+}
+.inspector-left .inspector-summary {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 10px;
+}
+.inspector-left .selection-details {
+  flex: initial;
+  width: 100%;
+}
+.inspector-left .selection-actions {
+  flex-wrap: wrap;
+  justify-content: flex-start;
+  gap: 4px;
+}
+.inspector-left .start-button {
+  min-width: 72px;
+  padding: 8px;
+}
+.inspector-left .selection-actions .quiet-button {
+  padding: 6px;
+}
+.inspector-left .node-heading {
+  font-size: 23px;
+}
+.inspector-left .vertex-details-slot {
+  padding: 0;
+  border-left: 0;
+}
+.inspector-left .vertex-details {
+  display: flex;
+  align-items: flex-start;
+  flex-direction: column;
+  gap: 8px;
+  padding-top: 12px;
+  margin: 0;
+  border-top: 1px solid var(--line);
+}
+.inspector-left .reading-resource {
+  max-width: 100%;
+}
+.inspector-left .vertex-configure {
+  margin-left: 0;
+  font-size: 12px;
+  gap: 6px;
+}
+.inspector-left .reading-progress {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  width: 100%;
+  gap: 8px;
+}
+.inspector-left .reading-progress input {
+  width: 100%;
+}
+.inspector-left .reading-progress button,
+.inspector-left .reading-progress progress {
+  grid-column: 1 / -1;
+}
+.inspector-left .child-list {
+  flex-direction: column;
+  max-height: 180px;
+  overflow: auto;
+}
+.inspector-left .child-list > button {
+  justify-content: flex-start;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  text-align: left;
 }
