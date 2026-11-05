@@ -38,7 +38,6 @@ async function create(
   await page
     .getByRole("button", { name: `Select ${name}`, exact: true })
     .click();
-  if (kind === "thought") await page.keyboard.press("Escape");
 }
 async function completePractice(page: Page): Promise<void> {
   await tour(page)

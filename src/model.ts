@@ -9,6 +9,7 @@ export interface GoalTree {
 export type HabitInterval = "day" | "week" | "month";
 export type VertexSettings =
   | { kind: "vanilla" }
+  | { kind: "bucket" }
   | { kind: "deadline"; deadlineAt: number }
   | { kind: "thought"; text?: string }
   | {
@@ -40,6 +41,8 @@ export interface GoalNode {
   multipleColors: boolean;
   /** Missing in older workspaces; Rust normalizes it to vanilla. */
   vertex?: Vertex;
+  bucketId?: string;
+  size?: { width: number; height: number };
   x: number;
   y: number;
 }
@@ -79,6 +82,14 @@ export interface State {
 }
 
 export type Action =
+  | {
+      type: "resizeVertex";
+      id: string;
+      x: number;
+      y: number;
+      width: number;
+      height: number;
+    }
   | { type: "showFinished"; treeId: string; enabled: boolean }
   | { type: "pedantic"; treeId: string; enabled: boolean }
   | { type: "create"; id: string; title: string }
@@ -106,6 +117,12 @@ export type Action =
   | { type: "configureVertex"; id: string; vertex: VertexSettings }
   | { type: "recordHabit"; id: string; undo?: boolean }
   | {
+      type: "setHabitHistory";
+      id: string;
+      completions: number[];
+      expected?: number[];
+    }
+  | {
       type: "edit";
       expected?: Pick<GoalNode, "title" | "notes" | "estimateMinutes">;
       id: string;
@@ -114,7 +131,7 @@ export type Action =
       notes: string;
     }
   | { type: "connect"; id: string; parentId: string | null }
-  | { type: "move"; id: string; x: number; y: number }
+  | { type: "move"; id: string; x: number; y: number; bucketId?: string }
   | { type: "layout"; treeId: string }
   | { type: "delete"; id: string }
   | { type: "complete"; id: string; sessionId: string }

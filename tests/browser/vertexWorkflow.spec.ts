@@ -304,6 +304,9 @@ for (const desktop of [false, true]) {
     await expect(preview).toContainText("...");
     expect((await preview.textContent())!.length).toBeLessThanOrEqual(130);
     await preview.click();
+    await expect(page.getByRole("dialog")).toHaveCount(0);
+    await expect(page.locator(".inspector h2")).toHaveText(thought.title);
+    await preview.dblclick();
     await expect(page.getByLabel("Thought text", { exact: true })).toHaveValue(
       text,
     );
@@ -320,7 +323,7 @@ for (const desktop of [false, true]) {
     );
     await page.reload();
     await page.getByRole("button", { name: "Fit graph", exact: true }).click();
-    await page.getByTestId(`node-fill-${thought.id}`).click();
+    await page.getByTestId(`node-fill-${thought.id}`).dblclick();
     await expect(page.getByLabel("Thought text", { exact: true })).toHaveValue(
       revised,
     );
@@ -650,56 +653,45 @@ for (const desktop of [false, true]) {
 }
 
 for (const desktop of [false, true]) {
-  test(`${desktop ? "desktop" : "web"}: switching trees opens with each root at the top center without moving vertices`, async ({
+  test(`${desktop ? "desktop" : "web"}: switching trees restores each camera without moving vertices`, async ({
     page,
   }) => {
     const now = Date.now();
-    let state = apply(
+    const state = apply(
       sampleWorkspace(now),
       { type: "create", id: "second", title: "Another tree" },
       now,
     );
-    state = apply(state, { type: "move", id: "project", x: -250, y: 900 }, now);
-    state = apply(state, { type: "move", id: "second", x: 1470, y: -360 }, now);
-    await page.addInitScript(() =>
-      localStorage.setItem("hyperforest.graph-height", "1000"),
-    );
     await initialize(page, desktop, "top", state);
-    const checkRoot = async (id: string) => {
-      await expect
-        .poll(async () => {
-          const graph = (await page.locator(".graph-svg").boundingBox())!;
-          const root = (await page
-            .getByTestId(`node-fill-${id}`)
-            .boundingBox())!;
-          return [
-            Math.round(root.x + root.width / 2 - graph.x - graph.width / 2),
-            Math.round(root.y + root.height / 2 - graph.y),
-          ];
-        })
-        .toEqual([0, 80]);
+    const camera = page.locator(".graph-svg > g");
+    const pan = async (dx: number, dy: number) => {
+      const bounds = (await page.locator(".graph-svg").boundingBox())!;
+      await page.mouse.move(bounds.x + 45, bounds.y + 45);
+      await page.mouse.down();
+      await page.mouse.move(bounds.x + 45 + dx, bounds.y + 45 + dy, {
+        steps: 8,
+      });
+      await page.mouse.up();
+      await expect(page.locator(".graph")).not.toHaveClass(/is-dragging/);
     };
-    await checkRoot("project");
-    for (const { width, panel } of [
-      { width: 1440, panel: "left" },
-      { width: 900, panel: "top" },
-      { width: 390, panel: "top" },
-    ]) {
-      await page.setViewportSize({ width, height: 1200 });
-      await page.getByRole("button", { name: "Options", exact: true }).click();
-      await page
-        .getByLabel("Selected vertex panel", { exact: true })
-        .selectOption(panel);
-      await page.getByRole("button", { name: "Done", exact: true }).click();
-      await page.getByRole("button", { name: "Zoom in", exact: true }).click();
-      await page.getByRole("tab", { name: /Another tree/ }).click();
-      await checkRoot("second");
-      await page
-        .getByRole("button", { name: "Fit graph", exact: true })
-        .click();
-      await page.getByRole("tab", { name: /A meaningful project/ }).click();
-      await checkRoot("project");
-    }
+    await page.getByRole("button", { name: "Zoom in", exact: true }).click();
+    await pan(85, 55);
+    const projectView = await camera.getAttribute("transform");
+    await page.getByRole("tab", { name: /Another tree/ }).click();
+    await page.getByRole("button", { name: "Zoom out", exact: true }).click();
+    await pan(140, 95);
+    const secondView = await camera.getAttribute("transform");
+    expect(secondView).not.toBe(projectView);
+    await page.getByRole("tab", { name: /A meaningful project/ }).click();
+    await expect(camera).toHaveAttribute("transform", projectView!);
+    await page.reload();
+    await expect(camera).toHaveAttribute("transform", projectView!);
+    await page.setViewportSize({ width: 390, height: 1050 });
+    await expect(camera).toHaveAttribute("transform", projectView!);
+    await page.getByRole("tab", { name: /Another tree/ }).click();
+    await expect(camera).toHaveAttribute("transform", secondView!);
+    await page.getByRole("tab", { name: /A meaningful project/ }).click();
+    await expect(camera).toHaveAttribute("transform", projectView!);
     expect(
       (await snapshot(page, desktop)).nodes.map(({ id, x, y }) => ({
         id,
@@ -709,3 +701,89 @@ for (const desktop of [false, true]) {
     ).toEqual(state.nodes.map(({ id, x, y }) => ({ id, x, y })));
   });
 }
+
+for (const desktop of [false, true]) {
+  test(`${desktop ? "desktop" : "web"}: graph zoom survives reloads, resizing, and tree switches`, async ({
+    page,
+  }) => {
+    await initialize(page, desktop);
+    const camera = page.locator(".graph-svg > g");
+    const scale = async () =>
+      Number(
+        (await camera.getAttribute("transform"))!.match(/scale\(([^)]+)\)/)![1],
+      );
+    const persisted = () =>
+      page.evaluate(() =>
+        Number(localStorage.getItem("hyperforest.graph-zoom")),
+      );
+    const positions = (await snapshot(page, desktop)).nodes.map(
+      ({ id, x, y }) => ({ id, x, y }),
+    );
+    await page.getByRole("button", { name: "Zoom in", exact: true }).click();
+    await expect.poll(scale).toBe(1.15);
+    await expect.poll(persisted).toBe(1.15);
+    await page.reload();
+    await expect.poll(scale).toBe(1.15);
+    await page.setViewportSize({ width: 390, height: 1050 });
+    await expect.poll(scale).toBe(1.15);
+    await page.setViewportSize({ width: 1440, height: 1050 });
+    await page
+      .getByRole("button", { name: "New hypertree", exact: true })
+      .click();
+    await page
+      .getByLabel("Hypertree name", { exact: true })
+      .fill("Zoomed tree");
+    await page
+      .getByRole("button", { name: "Create hypertree", exact: true })
+      .click();
+    await expect(page.getByRole("dialog")).toHaveCount(0);
+    await expect.poll(scale).toBe(1.15);
+    await page.getByRole("button", { name: "Zoom out", exact: true }).click();
+    await expect.poll(persisted).toBeCloseTo(1);
+    await page.getByRole("tab", { name: /A meaningful project/ }).click();
+    await expect.poll(scale).toBeCloseTo(1.15);
+    const graph = page.locator(".graph-svg");
+    await graph.hover();
+    await page.keyboard.down("Control");
+    await page.mouse.wheel(0, -200);
+    await page.keyboard.up("Control");
+    await expect.poll(scale).toBeCloseTo(1.35);
+    await expect.poll(persisted).toBeCloseTo(1.35);
+    await page.reload();
+    await expect.poll(scale).toBeCloseTo(1.35);
+    await page.getByRole("button", { name: "Fit graph", exact: true }).click();
+    await expect.poll(scale).not.toBeCloseTo(1.35);
+    const fitted = await scale();
+    await expect.poll(persisted).toBe(fitted);
+    await page.reload();
+    await expect.poll(scale).toBe(fitted);
+    expect(
+      (await snapshot(page, desktop)).nodes
+        .filter((node) => node.treeId === "project")
+        .map(({ id, x, y }) => ({ id, x, y })),
+    ).toEqual(positions);
+  });
+}
+
+test("invalid saved graph zoom falls back to the responsive default", async ({
+  page,
+}) => {
+  await page.addInitScript(() => {
+    localStorage.setItem("hyperforest.graph-zoom", "Infinity");
+    localStorage.setItem(
+      "hyperforest.graph-view.project",
+      '{"x":0,"y":0,"scale":-1}',
+    );
+  });
+  await initialize(page, false);
+  await expect(page.locator(".graph-svg > g")).toHaveAttribute(
+    "transform",
+    /scale\(1\)/,
+  );
+  await page.setViewportSize({ width: 390, height: 1050 });
+  await page.reload();
+  await expect(page.locator(".graph-svg > g")).toHaveAttribute(
+    "transform",
+    /scale\(0\.52\)/,
+  );
+});

@@ -164,6 +164,18 @@ pub fn validate(state: &Snapshot) -> Result<(), Error> {
     Ok(())
 }
 
+// Only standalone annotations are exempt. Attaching an ordinary subtree to one
+// must not provide a way around host-tree connectivity.
+fn standalone_annotation(state: &Snapshot, node: &Node) -> bool {
+    node.allows_isolation
+        && node.id != node.tree_id
+        && node.parent_id.is_none()
+        && !state
+            .nodes
+            .iter()
+            .any(|child| child.finished_at.is_none() && child.parent_id.as_ref() == Some(&node.id))
+}
+
 fn validate_pedantic(state: &Snapshot, tree_id: &Id) -> Result<(), Error> {
     // Connectivity is the first pedantic obligation and the most useful error.
     let mut n = 0;
@@ -171,6 +183,7 @@ fn validate_pedantic(state: &Snapshot, tree_id: &Id) -> Result<(), Error> {
         let node = &state.nodes[n];
         if node.tree_id == *tree_id
             && node.finished_at.is_none()
+            && !standalone_annotation(state, node)
             && node.id != *tree_id
             && node.parent_id.is_none()
         {
@@ -182,7 +195,10 @@ fn validate_pedantic(state: &Snapshot, tree_id: &Id) -> Result<(), Error> {
     let mut i = 0;
     while i < state.nodes.len() {
         let node = &state.nodes[i];
-        if node.tree_id == *tree_id && node.finished_at.is_none() {
+        if node.tree_id == *tree_id
+            && node.finished_at.is_none()
+            && !standalone_annotation(state, node)
+        {
             if node.id != *tree_id && node.parent_id.is_none() {
                 return Err(Error::Disconnected);
             }
@@ -199,6 +215,7 @@ fn validate_pedantic(state: &Snapshot, tree_id: &Id) -> Result<(), Error> {
                         let member = &state.nodes[j];
                         if member.tree_id == *tree_id
                             && member.finished_at.is_none()
+                            && !standalone_annotation(state, member)
                             && assigned_colors(state, member).contains(&color)
                         {
                             count += 1;

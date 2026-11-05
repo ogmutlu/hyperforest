@@ -24,6 +24,7 @@ fn add(state: &State, name: &str, parent: &str) -> State {
                 parent_id: Some(id(parent)),
                 title: id(name),
                 linked_tree_id: None,
+                allows_isolation: false,
             },
             1000,
         )
@@ -285,6 +286,7 @@ fn hiper_import_matches_titles_and_falls_back_to_a_reusable_hiper_tree() {
                 parent_id: None,
                 title: id("Logic"),
                 linked_tree_id: None,
+                allows_isolation: false,
             },
             9000,
         )
@@ -336,6 +338,7 @@ fn hiper_import_prefers_the_named_tree_over_links_and_existing_fallbacks() {
                 parent_id: Some(id("root")),
                 title: id("tez"),
                 linked_tree_id: Some(id("thesis")),
+                allows_isolation: false,
             },
             9000,
         )
@@ -395,6 +398,7 @@ fn hiper_import_resolves_multiple_matching_links_to_one_destination() {
                     parent_id: Some(id(&source)),
                     title: id("alias"),
                     linked_tree_id: Some(id("target")),
+                    allows_isolation: false,
                 },
                 1000,
             )

@@ -5,6 +5,7 @@ pub fn arrange(mut document: Document, tree_id: &str) -> Result<Document, String
     if !document.trees.iter().any(|tree| tree.id == tree_id) {
         return Err("This hypertree no longer exists.".into());
     }
+    let original = document.nodes.clone();
     let count = document.nodes.len();
     let mut children = vec![Vec::new(); count];
     let mut roots = Vec::new();
@@ -58,6 +59,19 @@ pub fn arrange(mut document: Document, tree_id: &str) -> Result<Document, String
             let share = width * weights[*child] / weights[i];
             pending.push((*child, depth + 1, offset, share));
             offset += share;
+        }
+    }
+    for old in &original {
+        if let Some(bucket_id) = &old.bucket_id {
+            let old_bucket = original.iter().find(|n| n.id == *bucket_id);
+            let new_bucket = document.nodes.iter().find(|n| n.id == *bucket_id);
+            if let (Some(before), Some(after)) = (old_bucket, new_bucket) {
+                let point = (old.x + after.x - before.x, old.y + after.y - before.y);
+                if let Some(member) = document.nodes.iter_mut().find(|n| n.id == old.id) {
+                    member.x = point.0;
+                    member.y = point.1;
+                }
+            }
         }
     }
     Ok(document)

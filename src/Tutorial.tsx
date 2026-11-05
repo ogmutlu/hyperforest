@@ -55,7 +55,7 @@ const lessons = [
     title: "Try a habit vertex",
     instruction:
       "Choose the habit symbol in the right column, name a habit, and create it.",
-    hint: "Choose how many repetitions you want per day, week, or month. The other symbols create deadlines, thought ovals, and readings with attachments.",
+    hint: "Choose how many repetitions you want per day, week, or month. The other symbols create deadlines, thought cards and buckets, and readings with attachments.",
   },
   {
     title: "Count one repetition",
@@ -72,7 +72,7 @@ const lessons = [
     title: "Capture a short thought",
     instruction:
       "Choose the thought symbol and create a vertex with your thought as its text.",
-    hint: "The oval adapts to the text. Thought vertices also support notes, focus, dragging, and connections.",
+    hint: "Single-click to select a thought; double-click to open its text. The rounded card adapts to the text and snaps to nearby thoughts. Drop vertices into buckets to move them together. Thought vertices also support notes, focus, dragging, and connections.",
   },
   {
     title: "Attach something to read",
@@ -487,7 +487,7 @@ function InteractiveTutorial({ close }: { close: () => void }) {
         <h2>{complete ? "You have the hang of it." : lesson?.title}</h2>
         <p>
           {complete
-            ? "You tried all five vertex types, moved and connected vertices, saved notes and focus, counted a habit repetition, and filtered your session history."
+            ? "You tried the goal, deadline, thought, reading, and habit vertices, moved and connected vertices, saved notes and focus, counted a habit repetition, and filtered your session history."
             : lesson?.instruction}
         </p>
         {!complete && editingForm && (

@@ -1,11 +1,29 @@
 import { useEffect, useRef, useState } from "react";
 import { Icon } from "./icons";
 
+function positionCalendar(details: HTMLDetailsElement) {
+  const calendar = details.querySelector<HTMLElement>(".habit-calendar");
+  if (!calendar) return;
+  calendar.style.transform = "";
+  const bounds = calendar.getBoundingClientRect();
+  const shift = Math.max(
+    12 - bounds.left,
+    Math.min(0, window.innerWidth - 12 - bounds.right),
+  );
+  calendar.style.transform = `translateX(${shift}px)`;
+}
+
 function dayKey(date: Date): string {
   return `${date.getFullYear()}-${date.getMonth()}-${date.getDate()}`;
 }
 
-export function HabitHistory({ completions }: { completions: number[] }) {
+export function HabitHistory({
+  completions,
+  changeHistory,
+}: {
+  completions: number[];
+  changeHistory?: () => void;
+}) {
   const [month, setMonth] = useState(() => {
     const now = new Date();
     return new Date(now.getFullYear(), now.getMonth(), 1);
@@ -43,21 +61,25 @@ export function HabitHistory({ completions }: { completions: number[] }) {
       className="habit-history"
       ref={ref}
       onToggle={(event) => {
-        if (!event.currentTarget.open) return;
-        const calendar =
-          event.currentTarget.querySelector<HTMLElement>(".habit-calendar");
-        if (!calendar) return;
-        calendar.style.transform = "";
-        const bounds = calendar.getBoundingClientRect();
-        const shift = Math.max(
-          12 - bounds.left,
-          Math.min(0, window.innerWidth - 12 - bounds.right),
-        );
-        calendar.style.transform = `translateX(${shift}px)`;
+        if (event.currentTarget.open) positionCalendar(event.currentTarget);
       }}
     >
-      <summary className="quiet-button" aria-label="Habit history">
-        <Icon name="calendar" size={14} /> History
+      <summary
+        className="icon-button hover-label-button"
+        aria-label="Habit history"
+        title="History"
+        onClick={(event) => {
+          event.preventDefault();
+          const details = ref.current;
+          if (!details) return;
+          details.open = !details.open;
+          if (details.open) positionCalendar(details);
+        }}
+      >
+        <Icon name="calendar" size={16} />
+        <span className="hover-label" aria-hidden="true">
+          History
+        </span>
       </summary>
       <section className="habit-calendar" aria-label="Habit history calendar">
         <div className="habit-calendar-heading">
@@ -117,6 +139,19 @@ export function HabitHistory({ completions }: { completions: number[] }) {
           })}
         </div>
         <p>Green days have recorded repetitions.</p>
+        {changeHistory && (
+          <button
+            type="button"
+            className="quiet-button"
+            onClick={() => {
+              ref.current?.removeAttribute("open");
+              changeHistory();
+            }}
+          >
+            <Icon name="pencil" size={14} />
+            Change history
+          </button>
+        )}
       </section>
     </details>
   );

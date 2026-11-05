@@ -60,7 +60,7 @@ async function create(
   ).toBeFocused();
   await page.keyboard.type(title);
   await expect(page.getByLabel("Parent vertex", { exact: true })).toHaveCount(
-    kind === "thought" ? 0 : 1,
+    kind === "thought" || kind === "bucket" ? 0 : 1,
   );
   if (kind === "deadline")
     await page.getByLabel("Deadline", { exact: true }).fill("2035-06-15T12:00");
@@ -83,7 +83,6 @@ async function create(
   await page
     .getByRole("button", { name: `Select ${title}`, exact: true })
     .click();
-  if (kind === "thought") await page.keyboard.press("Escape");
   await expect(page.locator(".inspector h2")).toHaveText(title);
   await expect(page.locator(".inspector")).toHaveAttribute(
     "data-editing",
@@ -95,7 +94,7 @@ async function create(
 }
 
 for (const desktop of [false, true]) {
-  test(`right column creates all five kinds without moving vertices (${desktop ? "desktop" : "web"})`, async ({
+  test(`right column creates all six kinds without moving vertices (${desktop ? "desktop" : "web"})`, async ({
     page,
   }, testInfo) => {
     await initialize(page, desktop);
@@ -103,7 +102,7 @@ for (const desktop of [false, true]) {
       name: "Create a vertex",
       exact: true,
     });
-    await expect(menu.getByRole("button")).toHaveCount(5);
+    await expect(menu.getByRole("button")).toHaveCount(6);
     const tools = page.getByRole("navigation", {
       name: "Graph tools",
       exact: true,
@@ -149,6 +148,7 @@ for (const desktop of [false, true]) {
       "vanilla",
       "deadline",
       "thought",
+      "bucket",
       "reading",
       "habit",
     ] as const) {
@@ -163,9 +163,11 @@ for (const desktop of [false, true]) {
       const after = await snapshot(page, desktop);
       const added = after.nodes.find((node) => node.title === `My ${kind}`)!;
       expect(added.vertex?.kind).toBe(kind);
-      expect(added.parentId).toBe(kind === "thought" ? null : "project");
+      expect(added.parentId).toBe(
+        kind === "thought" || kind === "bucket" ? null : "project",
+      );
       await expect(page.getByTestId(`edge-${added.id}`)).toHaveCount(
-        kind === "thought" ? 0 : 1,
+        kind === "thought" || kind === "bucket" ? 0 : 1,
       );
       expect(
         after.nodes
@@ -184,7 +186,7 @@ for (const desktop of [false, true]) {
       if (kind === "thought")
         await expect(
           page.getByTestId(`node-fill-${added.id}`),
-        ).toHaveJSProperty("tagName", "path");
+        ).toHaveJSProperty("tagName", "rect");
       if (kind === "reading")
         await expect(
           page.getByRole(desktop ? "button" : "link", {
@@ -208,7 +210,7 @@ for (const desktop of [false, true]) {
     const after = await snapshot(page, desktop);
     expect(
       after.nodes.filter((node) => node.title.startsWith("My ")),
-    ).toHaveLength(5);
+    ).toHaveLength(6);
     await page.getByRole("button", { name: "Fit graph", exact: true }).click();
     await page
       .getByRole("button", { name: "Select My habit", exact: true })
@@ -332,7 +334,7 @@ for (const kind of [
 test("deadline becomes overdue and can be rescheduled", async ({ page }) => {
   await initialize(page);
   await create(page, "deadline", "Due soon");
-  await page.getByRole("button", { name: "Edit deadline" }).click();
+  await page.getByRole("button", { name: "Change deadline" }).click();
   await page.getByLabel("Deadline", { exact: true }).fill("2020-01-01T12:00");
   await page.getByRole("button", { name: "Save settings" }).click();
   await expect(page.getByLabel("Deadline countdown")).toContainText(
@@ -359,7 +361,7 @@ test("reading attachment uses the desktop picker and native viewer", async ({
     .toBe("/tmp/a reading.pdf");
 });
 
-test("the creation column and thought oval fit a narrow viewport", async ({
+test("the creation column and thought card fit a narrow viewport", async ({
   page,
 }, testInfo) => {
   await page.setViewportSize({ width: 390, height: 844 });
@@ -380,11 +382,11 @@ test("the creation column and thought oval fit a narrow viewport", async ({
     ).join(" "),
   ).toBe("A short thought worth keeping");
   const canvas = await page.locator(".graph").boundingBox();
-  const oval = await page
+  const card = await page
     .locator(".goal[data-vertex-kind=thought] [data-testid^=node-fill]")
     .boundingBox();
-  expect(oval!.x).toBeGreaterThanOrEqual(canvas!.x);
-  expect(oval!.x + oval!.width).toBeLessThanOrEqual(canvas!.x + canvas!.width);
+  expect(card!.x).toBeGreaterThanOrEqual(canvas!.x);
+  expect(card!.x + card!.width).toBeLessThanOrEqual(canvas!.x + canvas!.width);
   expect(
     await page.evaluate(
       () => document.documentElement.scrollWidth <= innerWidth,

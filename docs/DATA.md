@@ -57,12 +57,13 @@ focus: null
 ```
 
 Nodes also carry a `vertex` record. It defaults to `{ kind: vanilla }` when absent
-in an existing version-1 workspace. The five supported records are:
+in an existing version-1 workspace. The six supported records are:
 
 ```yaml
 vertex: { kind: vanilla }
 vertex: { kind: deadline, deadlineAt: 1792108800000 }
 vertex: { kind: thought }
+vertex: { kind: bucket }
 vertex: { kind: reading, resource: '/home/me/paper.pdf' }
 vertex:
   kind: habit
@@ -81,8 +82,12 @@ supplies the period and lifetime counters and survives frequency edits.
 
 All kinds use the same graph, note, focus, color, and completion fields. Creating
 a vertex assigns just its new coordinates and preserves every existing position.
-Vertices created from the right column have `parentId: null` until explicitly
-connected. The selected vertex does not become their parent.
+Ordinary vertices default to children of the selection. Thoughts and buckets start
+with `parentId: null` and may remain standalone in pedantic mode. An optional
+`bucketId` on a node references an active bucket in the same tree. This visual
+membership never changes `parentId`; roots and buckets cannot be bucket members.
+An optional `size: { width, height }` stores thought and bucket dimensions in graph
+coordinates. Ordinary goals retain their circular geometry. Moving a bucket translates its members. Removing or finishing it releases them.
 
 Session times and focus samples use integer Unix milliseconds. Session `periods`
 must be ordered, nonoverlapping, inside the session span, and sum to `durationMs`.

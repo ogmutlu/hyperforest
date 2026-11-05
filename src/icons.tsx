@@ -21,10 +21,13 @@ export type IconName =
   | "vertex"
   | "deadline"
   | "thought"
+  | "bucket"
   | "reading"
   | "habit"
   | "external"
-  | "check";
+  | "check"
+  | "finish"
+  | "sidebar";
 export function Icon({
   name,
   size = 18,
@@ -55,10 +58,13 @@ export function Icon({
     fit: "M8 3H3v5m13-5h5v5M3 16v5h5m13-5v5h-5",
     trash: "M3 6h18M9 6V3h6v3M6 6l1 15h10l1-15M10 10v7m4-7v7",
     tree: "M12 5 5 18m7-13 7 13M9 5a3 3 0 1 0 6 0 3 3 0 1 0-6 0M2 19a3 3 0 1 0 6 0 3 3 0 1 0-6 0m14 0a3 3 0 1 0 6 0 3 3 0 1 0-6 0",
+    sidebar: "M3 3h18v18H3ZM9 3v18M5 7h2m-2 4h2m-2 4h2",
+    finish: "M5 22V3m0 1c5-4 9 4 15 0v11c-6 4-10-4-15 0",
     check: "m5 12 4 4L19 6",
-    vertex: "M20 12a8 8 0 1 0-16 0 8 8 0 1 0 16 0M12 8v8m-4-4h8",
+    vertex: "M20 12a8 8 0 1 0-16 0 8 8 0 1 0 16 0",
     deadline:
       "M20 13a8 8 0 1 0-16 0 8 8 0 1 0 16 0M12 9v5l3 2M9 2h6m-3 0v3m6 2 2-2",
+    bucket: "M3 7h18l-2 14H5ZM6 7V5a6 6 0 0 1 12 0v2M3 11h18",
     thought:
       "M21 11c0 5-4 8-10 8l-5 3 1-4C4 17 2 14 2 11c0-5 4-8 10-8s9 3 9 8ZM7 11h.01M12 11h.01M17 11h.01",
     reading:

@@ -18,6 +18,13 @@ pub struct Expected {
     rename_all_fields = "camelCase"
 )]
 pub enum Action {
+    ResizeVertex {
+        id: String,
+        x: f64,
+        y: f64,
+        width: f64,
+        height: f64,
+    },
     Create {
         id: String,
         title: String,
@@ -33,6 +40,11 @@ pub enum Action {
     ConfigureVertex {
         id: String,
         vertex: crate::vertex::Vertex,
+    },
+    SetHabitHistory {
+        id: String,
+        completions: Vec<u64>,
+        expected: Option<Vec<u64>>,
     },
     RecordHabit {
         id: String,
@@ -114,6 +126,7 @@ pub enum Action {
         id: String,
         x: f64,
         y: f64,
+        bucket_id: Option<String>,
     },
     Layout {
         tree_id: String,
@@ -157,6 +170,24 @@ pub fn apply(
     let mut notes = None;
     let mut added_vertex = None;
     let command = match action {
+        Action::ResizeVertex {
+            id,
+            x,
+            y,
+            width,
+            height,
+        } => {
+            let index = editable(&document, &id)?;
+            let size = crate::document::Size { width, height };
+            size.validate(&document.nodes[index].vertex)?;
+            if !x.is_finite() || !y.is_finite() {
+                return Err("Invalid vertex position.".into());
+            }
+            document.nodes[index].size = Some(size);
+            document.nodes[index].x = x;
+            document.nodes[index].y = y;
+            return Ok(document);
+        }
         Action::ConfigureVertex { id, vertex } => {
             let index = editable(&document, &id)?;
             // The full thought is presentation metadata; its domain title stays short.
@@ -173,16 +204,76 @@ pub fn apply(
             document.nodes[index].vertex = document.nodes[index].vertex.configure(vertex)?;
             return Ok(document);
         }
+        Action::SetHabitHistory {
+            id,
+            completions,
+            expected,
+        } => {
+            let index = editable(&document, &id)?;
+            if completions.len() > 100000 || completions.iter().any(|at| *at > now) {
+                return Err(
+                    "Habit history must contain at most 100000 repetitions, no later than now."
+                        .into(),
+                );
+            }
+            let crate::vertex::Vertex::Habit {
+                completions: records,
+                ..
+            } = &mut document.nodes[index].vertex
+            else {
+                return Err("Only habits have repetition history.".into());
+            };
+            if expected
+                .as_ref()
+                .is_some_and(|expected| expected != records)
+            {
+                return Err(
+                    "Habit history changed in another tab. Reopen it before saving.".into(),
+                );
+            }
+            let mut completions = completions;
+            completions.sort_unstable();
+            *records = completions;
+            document.nodes[index].vertex.validate()?;
+            return Ok(document);
+        }
         Action::RecordHabit { id, undo } => {
             let index = editable(&document, &id)?;
             document.nodes[index].vertex.record(now, undo)?;
             return Ok(document);
         }
-        Action::Move { id, x, y } => {
+        Action::Move {
+            id,
+            x,
+            y,
+            bucket_id,
+        } => {
             let index = editable(&document, &id)?;
             if !x.is_finite() || !y.is_finite() {
                 return Err("Invalid vertex position.".into());
             }
+            if let Some(target) = &bucket_id {
+                if document.nodes[index].id == document.nodes[index].tree_id
+                    || matches!(document.nodes[index].vertex, crate::vertex::Vertex::Bucket)
+                    || !document.nodes.iter().any(|bucket| {
+                        bucket.id == *target
+                            && bucket.tree_id == document.nodes[index].tree_id
+                            && bucket.finished_at.is_none()
+                            && matches!(bucket.vertex, crate::vertex::Vertex::Bucket)
+                    })
+                {
+                    return Err("Choose an active bucket in this hypertree.".into());
+                }
+            }
+            let dx = x - document.nodes[index].x;
+            let dy = y - document.nodes[index].y;
+            for member in &mut document.nodes {
+                if member.bucket_id.as_deref() == Some(&id) {
+                    member.x += dx;
+                    member.y += dy;
+                }
+            }
+            document.nodes[index].bucket_id = bucket_id;
             document.nodes[index].x = x;
             document.nodes[index].y = y;
             return Ok(document);
@@ -217,6 +308,7 @@ pub fn apply(
             vertex,
         } => {
             vertex.validate_new()?;
+            let allows_isolation = vertex.allows_isolation();
             added_vertex = Some((identity.clone(), parent_id.clone(), vertex));
             let parent = &document.nodes[find_node(&document, &parent_id)?];
             d::Command::Add {
@@ -225,6 +317,7 @@ pub fn apply(
                 parent_id: Some(id(parent_id)),
                 title: title(name),
                 linked_tree_id: linked_tree_id.map(id),
+                allows_isolation,
             }
         }
         Action::Isolate {
@@ -235,6 +328,7 @@ pub fn apply(
             vertex,
         } => {
             vertex.validate_new()?;
+            let allows_isolation = vertex.allows_isolation();
             added_vertex = Some((identity.clone(), tree_id.clone(), vertex));
             d::Command::Add {
                 id: id(identity),
@@ -242,6 +336,7 @@ pub fn apply(
                 parent_id: None,
                 title: title(name),
                 linked_tree_id: linked_tree_id.map(id),
+                allows_isolation,
             }
         }
         Action::Edit {

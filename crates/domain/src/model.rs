@@ -29,6 +29,8 @@ pub struct Node {
     pub color: Option<Color>,
     pub colors: Vec<Color>,
     pub multiple_colors: bool,
+    /// Standalone annotations may sit outside the host tree.
+    pub allows_isolation: bool,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -98,6 +100,7 @@ pub enum Command {
         parent_id: Option<Id>,
         title: Text,
         linked_tree_id: Option<Id>,
+        allows_isolation: bool,
     },
     Edit {
         id: Id,

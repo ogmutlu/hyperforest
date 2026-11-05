@@ -1,19 +1,16 @@
 import { GraphVertex } from "./GraphVertex";
 import { GraphEdge } from "./GraphEdge";
 import { useFrameState } from "./useFrameState";
-import {
-  memo,
-  useCallback,
-  useEffect,
-  useLayoutEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { PointerEvent as ReactPointerEvent } from "react";
 import type { Action, GoalNode, State } from "./model";
 import { Icon } from "./icons";
-import { vertexGeometry } from "./vertices";
+import {
+  vertexGeometry,
+  snapThought,
+  bucketAt,
+  resizedVertex,
+} from "./vertices";
 
 interface Props {
   editing: boolean;
@@ -23,9 +20,11 @@ interface Props {
   time: Map<string, number>;
   select: (id: string) => void;
   openThought: (id: string) => void;
+  contextMenu: (id: string, point: { x: number; y: number }) => void;
   start: (id: string, point: { x: number; y: number }) => Promise<void>;
   run: (action: Action) => Promise<boolean>;
-  rememberSize?: boolean;
+  emptyClick: () => void;
+  rememberView?: boolean;
 }
 interface Drag {
   id: string | null;
@@ -43,13 +42,15 @@ export const Graph = memo(function Graph({
   time,
   select,
   openThought,
+  contextMenu,
+  emptyClick,
   start,
   run,
-  rememberSize = true,
+  rememberView = true,
 }: Props) {
   const container = useRef<HTMLDivElement>(null);
   const [initialHeight] = useState(() => {
-    if (!rememberSize) return undefined;
+    if (!rememberView) return undefined;
     try {
       const height = Number(localStorage.getItem("hyperforest.graph-height"));
       return Number.isFinite(height) && height >= 530 ? height : undefined;
@@ -59,7 +60,7 @@ export const Graph = memo(function Graph({
   });
   useEffect(() => {
     const element = container.current;
-    if (!rememberSize || !element) return;
+    if (!rememberView || !element) return;
     let previous = initialHeight;
     const observer = new ResizeObserver(() => {
       // Native CSS resizing writes an inline height. Responsive default heights
@@ -77,10 +78,23 @@ export const Graph = memo(function Graph({
     });
     observer.observe(element);
     return () => observer.disconnect();
-  }, [initialHeight, rememberSize]);
+  }, [initialHeight, rememberView]);
   const svg = useRef<SVGSVGElement>(null);
   const drag = useRef<Drag | null>(null);
   const dragged = useRef(false);
+  const resize = useRef<{
+    node: GoalNode;
+    startX: number;
+    startY: number;
+    width: number;
+    height: number;
+  } | null>(null);
+  const [resizing, setResizing, flushResizing] = useFrameState<{
+    id: string;
+    x: number;
+    y: number;
+    size: { width: number; height: number };
+  } | null>(null);
   const [link, setLink, flushLink, latestLink] = useFrameState<{
     id: string;
     x: number;
@@ -119,42 +133,56 @@ export const Graph = memo(function Graph({
     small: boolean,
   ): { x: number; y: number; scale: number } =>
     small ? { x: 264, y: 172.8, scale: 0.52 } : { x: 0, y: 0, scale: 1 };
-  const [camera, setCamera, flushCamera, latestCamera] = useFrameState(
-    fitCamera(compact),
-  );
-  const root = useRef<GoalNode | undefined>(undefined);
-  root.current = state.nodes.find((node) => node.id === treeId);
-  const centerRoot = useCallback(
-    (small: boolean) => {
-      const element = svg.current;
-      const node = root.current;
-      const matrix = element?.getScreenCTM();
-      if (!element || !node || !matrix) return;
-      const bounds = element.getBoundingClientRect();
-      if (!bounds.width || !bounds.height) return;
-      const scale = small ? 0.52 : 1;
-      const padding = Math.max(
-        80,
-        vertexGeometry(node).ry * scale * matrix.d + 24,
-      );
-      // Convert the visible viewport anchor, including SVG letterboxing/cropping,
-      // into camera coordinates. Saved vertex coordinates remain unchanged.
-      const anchor = new DOMPoint(
-        bounds.left + bounds.width / 2,
-        bounds.top + padding,
-      ).matrixTransform(matrix.inverse());
-      setCamera({
-        x: anchor.x - node.x * scale,
-        y: anchor.y - node.y * scale,
-        scale,
-      });
-      flushCamera();
+  const viewKey = `hyperforest.graph-view.${treeId}`;
+  const [initialCamera] = useState(() => {
+    const fallback = fitCamera(compact);
+    if (!rememberView) return fallback;
+    try {
+      const saved = JSON.parse(localStorage.getItem(viewKey) ?? "null") as {
+        x?: unknown;
+        y?: unknown;
+        scale?: unknown;
+      } | null;
+      if (
+        saved &&
+        typeof saved.x === "number" &&
+        Number.isFinite(saved.x) &&
+        typeof saved.y === "number" &&
+        Number.isFinite(saved.y) &&
+        typeof saved.scale === "number" &&
+        Number.isFinite(saved.scale) &&
+        saved.scale > 0 &&
+        saved.scale <= 2.5
+      ) {
+        return { x: saved.x, y: saved.y, scale: saved.scale };
+      }
+      // Migrate the previous device-wide zoom preference for unvisited tabs.
+      const scale = Number(localStorage.getItem("hyperforest.graph-zoom"));
+      return Number.isFinite(scale) && scale > 0 && scale <= 2.5
+        ? { ...fallback, scale }
+        : fallback;
+    } catch {
+      return fallback;
+    }
+  });
+  const [camera, setCamera, , latestCamera] = useFrameState(initialCamera);
+  const persistCamera = useCallback(
+    (view: typeof initialCamera) => {
+      if (!rememberView) return;
+      try {
+        localStorage.setItem(viewKey, JSON.stringify(view));
+        localStorage.setItem("hyperforest.graph-zoom", String(view.scale));
+      } catch {
+        // Navigation remains usable when device preference storage is blocked.
+      }
     },
-    [setCamera, flushCamera],
+    [rememberView, viewKey],
   );
-  useLayoutEffect(() => {
-    centerRoot(compact);
-  }, [centerRoot, compact, treeId]);
+  useEffect(() => persistCamera(camera), [camera, persistCamera]);
+  useEffect(
+    () => () => persistCamera(latestCamera.current),
+    [persistCamera, latestCamera],
+  );
   useEffect(() => {
     const element = svg.current;
     if (!element) return;
@@ -195,17 +223,38 @@ export const Graph = memo(function Graph({
       ),
     [state.nodes, treeId, showFinished],
   );
-  const nodes = useMemo(
-    () =>
-      position
-        ? visibleNodes.map((node) =>
-            node.id === position.id
-              ? { ...node, x: position.x, y: position.y }
-              : node,
-          )
-        : visibleNodes,
-    [visibleNodes, position],
-  );
+  const nodes = useMemo(() => {
+    if (resizing)
+      return visibleNodes.map((node) =>
+        node.id === resizing.id ? { ...node, ...resizing } : node,
+      );
+    if (!position) return visibleNodes;
+    const moving = visibleNodes.find((node) => node.id === position.id);
+    if (!moving) return visibleNodes;
+    const bucketId = bucketAt(moving, position, visibleNodes);
+    return visibleNodes.map((node) => {
+      if (node.id === position.id) {
+        const moved = { ...node, x: position.x, y: position.y };
+        delete moved.bucketId;
+        if (bucketId) moved.bucketId = bucketId;
+        return moved;
+      }
+      return node.bucketId === position.id
+        ? {
+            ...node,
+            x: node.x + position.x - moving.x,
+            y: node.y + position.y - moving.y,
+          }
+        : node;
+    });
+  }, [visibleNodes, position, resizing]);
+  const movingNode = position
+    ? visibleNodes.find((node) => node.id === position.id)
+    : undefined;
+  const dropBucketId =
+    movingNode && position
+      ? bucketAt(movingNode, position, visibleNodes)
+      : undefined;
   const nodesById = useMemo(
     () => new Map(nodes.map((node) => [node.id, node])),
     [nodes],
@@ -219,14 +268,18 @@ export const Graph = memo(function Graph({
   const fitAll = (): void => {
     const rect = svg.current?.getBoundingClientRect();
     if (!rect) return;
-    const viewportStart = coordinate(rect.left, rect.top);
-    const viewportEnd = coordinate(rect.right, rect.bottom);
-    let left = 0,
-      top = 0,
-      right = 1100,
-      bottom = 720;
+    const viewportStart = coordinate(rect.left + 24, rect.top + 24);
+    const viewportEnd = coordinate(
+      rect.right - (editing ? 84 : 24),
+      rect.bottom - 56,
+    );
+    if (!nodes.length) return;
+    let left = Infinity,
+      top = Infinity,
+      right = -Infinity,
+      bottom = -Infinity;
     for (const node of nodes) {
-      const { rx, ry } = vertexGeometry(node);
+      const { rx, ry } = vertexGeometry(node, nodes);
       left = Math.min(left, node.x - Math.max(rx, 100) - 24);
       right = Math.max(right, node.x + Math.max(rx, 100) + 24);
       top = Math.min(top, node.y - ry - 24);
@@ -250,6 +303,7 @@ export const Graph = memo(function Graph({
         select(node.id);
         return;
       }
+      event.preventDefault();
       const point = coordinate(event.clientX, event.clientY);
       drag.current = {
         id: node?.id ?? null,
@@ -262,6 +316,46 @@ export const Graph = memo(function Graph({
       if (node) select(node.id);
     },
     [editing, select, latestCamera],
+  );
+  const resizeDown = useCallback(
+    (event: ReactPointerEvent<SVGElement>, node: GoalNode) => {
+      if (!editing || node.finishedAt !== undefined || event.button !== 0)
+        return;
+      event.stopPropagation();
+      event.preventDefault();
+      dragged.current = true;
+      select(node.id);
+      const point = coordinate(event.clientX, event.clientY);
+      const geometry = vertexGeometry(node, state.nodes);
+      resize.current = {
+        node,
+        startX: point.x,
+        startY: point.y,
+        width: geometry.rx * 2,
+        height: geometry.ry * 2,
+      };
+      svg.current?.setPointerCapture(event.pointerId);
+    },
+    [editing, select, state.nodes],
+  );
+  const resizeByKeyboard = useCallback(
+    (node: GoalNode, dx: number, dy: number) => {
+      const geometry = vertexGeometry(node, state.nodes);
+      const next = resizedVertex(
+        node,
+        geometry.rx * 2 + dx,
+        geometry.ry * 2 + dy,
+        state.nodes,
+      );
+      void run({
+        type: "resizeVertex",
+        id: node.id,
+        x: next.x,
+        y: next.y,
+        ...next.size,
+      });
+    },
+    [state.nodes, run],
   );
   const linkDown = useCallback(
     (event: ReactPointerEvent<SVGElement>, node: GoalNode): void => {
@@ -281,12 +375,28 @@ export const Graph = memo(function Graph({
   useEffect(() => {
     if (!editing) {
       drag.current = null;
+      resize.current = null;
+      setResizing(null);
       setPosition(null);
       setLink(null);
       setDragging(false);
     }
-  }, [editing, setPosition, setLink]);
+  }, [editing, setPosition, setLink, setResizing]);
   const move = (event: ReactPointerEvent<SVGSVGElement>): void => {
+    if (resize.current) {
+      const current = resize.current;
+      const point = coordinate(event.clientX, event.clientY);
+      const next = resizedVertex(
+        current.node,
+        current.width + (point.x - current.startX) / latestCamera.current.scale,
+        current.height +
+          (point.y - current.startY) / latestCamera.current.scale,
+        visibleNodes,
+      );
+      setResizing({ id: current.node.id, ...next });
+      setDragging(true);
+      return;
+    }
     if (latestLink.current) {
       const point = coordinate(event.clientX, event.clientY);
       setLink({
@@ -307,13 +417,23 @@ export const Graph = memo(function Graph({
     svg.current?.setPointerCapture(event.pointerId);
     setDragging(true);
     beginNavigation();
-    if (current.id)
-      setPosition({
-        id: current.id,
+    if (current.id) {
+      const node = visibleNodes.find((item) => item.id === current.id);
+      if (!node) return;
+      const point = {
         x: current.x + dx / latestCamera.current.scale,
         y: current.y + dy / latestCamera.current.scale,
-      });
-    else {
+      };
+      const bucketId = bucketAt(node, point, visibleNodes);
+      const snapped = snapThought(
+        node,
+        point,
+        visibleNodes,
+        16 / latestCamera.current.scale,
+        bucketId ?? null,
+      );
+      setPosition({ id: current.id, ...snapped });
+    } else {
       setCamera((previous) => ({
         ...previous,
         x: current.x + dx,
@@ -323,26 +443,60 @@ export const Graph = memo(function Graph({
   };
   const up = async (): Promise<void> => {
     endNavigation();
+    if (resize.current) {
+      resize.current = null;
+      const next = flushResizing();
+      if (next)
+        await run({
+          type: "resizeVertex",
+          id: next.id,
+          x: next.x,
+          y: next.y,
+          ...next.size,
+        });
+      setResizing(null);
+      setDragging(false);
+      return;
+    }
     const link = flushLink();
     const position = flushPosition();
     if (link) {
-      const target = nodes.find((node) => {
-        const { rx, ry } = vertexGeometry(node);
-        return (
-          node.finishedAt === undefined &&
-          ((node.x - link.x) / Math.max(48, rx)) ** 2 +
-            ((node.y - link.y) / Math.max(48, ry)) ** 2 <=
-            1
-        );
-      });
+      const target = [...nodes]
+        .sort(
+          (a, b) =>
+            Number(a.vertex?.kind === "bucket") -
+            Number(b.vertex?.kind === "bucket"),
+        )
+        .find((node) => {
+          const { rx, ry } = vertexGeometry(node, nodes);
+          return (
+            node.finishedAt === undefined &&
+            (node.vertex?.kind === "thought" || node.vertex?.kind === "bucket"
+              ? Math.abs(node.x - link.x) <= rx &&
+                Math.abs(node.y - link.y) <= ry
+              : ((node.x - link.x) / Math.max(48, rx)) ** 2 +
+                  ((node.y - link.y) / Math.max(48, ry)) ** 2 <=
+                1)
+          );
+        });
       setLink(null);
       await run({ type: "connect", id: link.id, parentId: target?.id ?? null });
       return;
     }
     const current = drag.current;
     drag.current = null;
-    if (current?.id && current.moved && position)
-      await run({ type: "move", ...position });
+    if (current && !current.id && !current.moved) emptyClick();
+    if (current?.id && current.moved && position) {
+      const node = visibleNodes.find((item) => item.id === current.id);
+      const bucketId = node
+        ? bucketAt(node, position, visibleNodes)
+        : undefined;
+      await run({
+        type: "move",
+        ...position,
+        ...(bucketId ? { bucketId } : {}),
+      });
+    }
     setPosition(null);
     setDragging(false);
   };
@@ -361,7 +515,13 @@ export const Graph = memo(function Graph({
         viewBox="0 0 1100 720"
         preserveAspectRatio={compact ? "xMidYMid slice" : "xMidYMid meet"}
         aria-label="Goal hypertree"
-        onPointerDown={(event) => down(event)}
+        onPointerDown={(event) => {
+          if (
+            event.target instanceof Element &&
+            !event.target.closest(".goal, .edge")
+          )
+            down(event);
+        }}
         onPointerMove={move}
         onPointerUp={() => {
           void up();
@@ -369,6 +529,8 @@ export const Graph = memo(function Graph({
         onPointerCancel={() => {
           endNavigation();
           drag.current = null;
+          resize.current = null;
+          setResizing(null);
           setPosition(null);
           setLink(null);
           setDragging(false);
@@ -388,6 +550,31 @@ export const Graph = memo(function Graph({
         <g
           transform={`translate(${camera.x} ${camera.y}) scale(${camera.scale})`}
         >
+          {nodes
+            .filter((node) => node.vertex?.kind === "bucket")
+            .map((node) => (
+              <GraphVertex
+                key={node.id}
+                node={node}
+                geometry={vertexGeometry(node, nodes)}
+                dropTarget={dropBucketId === node.id}
+                treeId={treeId}
+                selected={selected === node.id}
+                isActive={state.focus?.nodeId === node.id}
+                editing={editing}
+                elapsed={time.get(node.id) ?? 0}
+                down={down}
+                linkDown={linkDown}
+                resizeDown={resizeDown}
+                resizeByKeyboard={resizeByKeyboard}
+                select={select}
+                contextMenu={contextMenu}
+                openThought={(id, keyboard) => {
+                  if (keyboard || !dragged.current) openThought(id);
+                }}
+                start={start}
+              />
+            ))}
           {nodes.map((node) => {
             const parent = nodesById.get(node.parentId ?? "");
             return parent ? (
@@ -414,24 +601,31 @@ export const Graph = memo(function Graph({
                 />
               ) : null;
             })()}
-          {nodes.map((node) => (
-            <GraphVertex
-              key={node.id}
-              node={node}
-              treeId={treeId}
-              selected={selected === node.id}
-              isActive={state.focus?.nodeId === node.id}
-              editing={editing}
-              elapsed={time.get(node.id) ?? 0}
-              down={down}
-              linkDown={linkDown}
-              select={select}
-              openThought={(id, keyboard) => {
-                if (keyboard || !dragged.current) openThought(id);
-              }}
-              start={start}
-            />
-          ))}
+          {nodes
+            .filter((node) => node.vertex?.kind !== "bucket")
+            .map((node) => (
+              <GraphVertex
+                key={node.id}
+                node={node}
+                geometry={vertexGeometry(node, nodes)}
+                dropTarget={dropBucketId === node.id}
+                treeId={treeId}
+                selected={selected === node.id}
+                isActive={state.focus?.nodeId === node.id}
+                editing={editing}
+                elapsed={time.get(node.id) ?? 0}
+                down={down}
+                linkDown={linkDown}
+                resizeDown={resizeDown}
+                resizeByKeyboard={resizeByKeyboard}
+                select={select}
+                contextMenu={contextMenu}
+                openThought={(id, keyboard) => {
+                  if (keyboard || !dragged.current) openThought(id);
+                }}
+                start={start}
+              />
+            ))}
         </g>
       </svg>
       <div className="canvas-controls">
@@ -459,8 +653,13 @@ export const Graph = memo(function Graph({
         >
           +
         </button>
-        <button className="icon-button" aria-label="Fit graph" onClick={fitAll}>
-          <Icon name="fit" />
+        <button
+          className="icon-button fit-graph-button"
+          aria-label="Fit graph"
+          title="Show entire graph"
+          onClick={fitAll}
+        >
+          <Icon name="fit" /> <span>Show all</span>
         </button>
         <button
           className="icon-button"

@@ -60,7 +60,7 @@ notes, notes filenames, coordinates, fill, and finished-vertex visibility.
 `command.rs` separates business commands from presentation edits. For example,
 reparenting goes into the domain; moving a vertex only updates coordinates.
 Layout uses floating-point geometry in `layout.rs`, outside the domain.
-`vertex.rs` validates the five vertex kinds and retains deadline timestamps,
+`vertex.rs` validates the six vertex kinds and retains deadline timestamps,
 reading attachment paths/URLs, and habit frequency and timestamped repetitions.
 These metadata and counter operations remain outside the proof domain; every kind
 uses the same domain operations for graph structure, focus, colors, and completion.

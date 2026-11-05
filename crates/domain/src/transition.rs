@@ -62,6 +62,7 @@ pub fn apply(state: &mut Snapshot, command: Command, now: u64) -> Result<(), Err
                 color: None,
                 colors: vec![],
                 multiple_colors: false,
+                allows_isolation: false,
             });
         }
         Command::Add {
@@ -70,6 +71,7 @@ pub fn apply(state: &mut Snapshot, command: Command, now: u64) -> Result<(), Err
             parent_id,
             title,
             linked_tree_id,
+            allows_isolation,
         } => {
             tree_index(state, &tree_id)?;
             let mut color = None;
@@ -104,6 +106,7 @@ pub fn apply(state: &mut Snapshot, command: Command, now: u64) -> Result<(), Err
                 color,
                 colors,
                 multiple_colors,
+                allows_isolation,
             });
         }
         Command::Edit {
@@ -376,6 +379,7 @@ pub fn apply(state: &mut Snapshot, command: Command, now: u64) -> Result<(), Err
                                     parent_id: Some(tree_id),
                                     title,
                                     linked_tree_id: None,
+                                    allows_isolation: false,
                                 },
                                 now,
                             )?;

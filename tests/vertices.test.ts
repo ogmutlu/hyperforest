@@ -321,7 +321,7 @@ describe("vertex kinds", () => {
     ).toBe(2);
   });
 
-  it("wraps short thoughts and adjusts their oval when the text changes", () => {
+  it("wraps short thoughts and adjusts their card when the text changes", () => {
     const node = {
       ...sampleWorkspace(1000).nodes[0]!,
       vertex: { kind: "thought" as const },

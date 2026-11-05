@@ -5,6 +5,10 @@ import { ActionMenu } from "./ActionMenu";
 import { TutorialButton } from "./TutorialContext";
 import { VertexFields } from "./VertexFields";
 import { VertexDetails } from "./VertexDetails";
+import { InspectorNotes } from "./InspectorNotes";
+import { HabitHistoryEditor } from "./HabitHistoryEditor";
+import { VertexContextMenu } from "./VertexContextMenu";
+import type { VertexMenuItem } from "./VertexContextMenu";
 import {
   defaultVertex,
   thoughtText,
@@ -355,12 +359,52 @@ export function App({
     | "tabs"
     | "options"
     | "history"
+    | "habitHistory"
     | "clear"
     | "import"
     | null
   >(null);
   const [pendingImport, setPendingImport] = useState<State | null>(null);
   const [editing, setEditing] = useState(false);
+  const [inspectorOpen, setInspectorOpen] = useState(() => {
+    if (practice) return true;
+    try {
+      return localStorage.getItem("hyperforest.inspector-open") !== "false";
+    } catch {
+      return true;
+    }
+  });
+  const [contextInspector, setContextInspector] = useState(false);
+  const [inspectorView, setInspectorView] = useState<"details" | "notes">(
+    "details",
+  );
+  const [contextMenu, setContextMenu] = useState<{
+    id: string;
+    x: number;
+    y: number;
+  } | null>(null);
+  const closeContextMenu = useCallback(() => setContextMenu(null), []);
+  const openContextMenu = useCallback(
+    (id: string, point: { x: number; y: number }) => {
+      setSelected(id);
+      setContextMenu({ id, ...point });
+    },
+    [],
+  );
+  useEffect(() => {
+    if (!practice && !contextInspector)
+      try {
+        localStorage.setItem(
+          "hyperforest.inspector-open",
+          String(inspectorOpen),
+        );
+      } catch {
+        /* Keep the panel usable without preference storage. */
+      }
+  }, [inspectorOpen, practice, contextInspector]);
+  useEffect(() => {
+    setContextMenu(null);
+  }, [treeId]);
   const [panelPosition, setPanelPosition] = useState<"top" | "left" | null>(
     () => {
       if (practice) return "top";
@@ -415,6 +459,15 @@ export function App({
       item.parentId === node?.id &&
       (item.finishedAt === undefined || tree?.showFinished),
   );
+  const bucketSelected = node?.vertex?.kind === "bucket";
+  const listedVertices = bucketSelected
+    ? state.nodes.filter(
+        (item) =>
+          item.bucketId === node.id &&
+          item.treeId === node.treeId &&
+          (item.finishedAt === undefined || tree?.showFinished),
+      )
+    : children;
   const color = node ? nodeColor(node) : "#dfc491";
   const colors = node ? assignedNodeColors(node) : [color];
   const run = useCallback(
@@ -478,6 +531,128 @@ export function App({
     },
     [run],
   );
+  const contextNode = contextMenu
+    ? state.nodes.find(
+        (item) => item.id === contextMenu.id && item.treeId === tree?.id,
+      )
+    : undefined;
+  const contextItems: VertexMenuItem[] = contextNode
+    ? [
+        {
+          label:
+            contextNode.vertex?.kind === "bucket" ? "Show contents" : "Details",
+          icon: contextNode.vertex?.kind === "bucket" ? "bucket" : "sidebar",
+          action: "details",
+        },
+        { label: "Notes", icon: "notes", action: "notes" },
+        ...(contextNode.vertex?.kind === "thought"
+          ? [
+              {
+                label: "Open thought",
+                icon: "thought" as const,
+                action: "thought",
+              },
+            ]
+          : []),
+        ...(contextNode.vertex?.kind === "habit"
+          ? [
+              {
+                label: "Record repetition",
+                icon: "plus" as const,
+                action: "recordHabit",
+                disabled: busy || contextNode.finishedAt !== undefined,
+              },
+            ]
+          : []),
+        ...(contextNode.vertex?.kind === "deadline"
+          ? [
+              {
+                label: "Change deadline",
+                icon: "deadline" as const,
+                action: "deadline",
+                disabled: busy || contextNode.finishedAt !== undefined,
+              },
+            ]
+          : []),
+        {
+          label: "Focus",
+          icon: "play",
+          action: "focus",
+          disabled: busy || contextNode.finishedAt !== undefined,
+        },
+        ...(editing
+          ? [
+              {
+                label: "Color",
+                icon: "palette" as const,
+                action: "color",
+                disabled: busy || contextNode.finishedAt !== undefined,
+              },
+              {
+                label: "Finish subgoal",
+                icon: "finish" as const,
+                action: "complete",
+                disabled:
+                  busy ||
+                  contextNode.id === contextNode.treeId ||
+                  contextNode.finishedAt !== undefined,
+              },
+              {
+                label:
+                  contextNode.id === contextNode.treeId
+                    ? "Delete hypertree"
+                    : "Delete subtree",
+                icon: "trash" as const,
+                action: "delete",
+                disabled: busy || contextNode.finishedAt !== undefined,
+              },
+            ]
+          : []),
+      ]
+    : [];
+  const chooseContextAction = (action: string) => {
+    if (!contextNode) return;
+    setContextMenu(null);
+    setSelected(contextNode.id);
+    switch (action) {
+      case "details":
+        setContextInspector((transient) => transient || !inspectorOpen);
+        setInspectorView("details");
+        setInspectorOpen(true);
+        break;
+      case "notes":
+        setContextInspector((transient) => transient || !inspectorOpen);
+        setInspectorView("notes");
+        setInspectorOpen(true);
+        break;
+      case "thought":
+        setVertexSettings({ kind: "thought", text: thoughtText(contextNode) });
+        setDialog("vertex");
+        break;
+      case "focus":
+        void start(contextNode.id);
+        break;
+      case "color":
+        setCustomColor(nodeColor(contextNode));
+        setDialog("color");
+        break;
+      case "complete":
+        setDialog("complete");
+        break;
+      case "delete":
+        setDialog("delete");
+        break;
+      case "recordHabit":
+        void run({ type: "recordHabit", id: contextNode.id });
+        break;
+      case "deadline":
+        if (contextNode.vertex?.kind === "deadline") {
+          setVertexSettings(contextNode.vertex);
+          setDialog("vertex");
+        }
+        break;
+    }
+  };
   const create = async (event: FormEvent): Promise<void> => {
     event.preventDefault();
     const id = crypto.randomUUID();
@@ -493,25 +668,26 @@ export function App({
       const vertex = thought
         ? { kind: "thought" as const, text: newName.trim() }
         : newVertex;
-      const action: Action = thought
-        ? { type: "isolate", id, treeId: tree.id, title, vertex }
-        : newParentId
-          ? {
-              type: "add",
-              id,
-              parentId: newParentId,
-              title,
-              vertex,
-              ...(linkedTreeId ? { linkedTreeId } : {}),
-            }
-          : {
-              type: "isolate",
-              id,
-              treeId: tree.id,
-              title,
-              vertex,
-              ...(linkedTreeId ? { linkedTreeId } : {}),
-            };
+      const action: Action =
+        thought || newVertex.kind === "bucket"
+          ? { type: "isolate", id, treeId: tree.id, title, vertex }
+          : newParentId
+            ? {
+                type: "add",
+                id,
+                parentId: newParentId,
+                title,
+                vertex,
+                ...(linkedTreeId ? { linkedTreeId } : {}),
+              }
+            : {
+                type: "isolate",
+                id,
+                treeId: tree.id,
+                title,
+                vertex,
+                ...(linkedTreeId ? { linkedTreeId } : {}),
+              };
       if (await run(action)) {
         setSelected(thought ? node.id : newParentId || node.id);
         setEditing(true);
@@ -711,10 +887,12 @@ export function App({
         </nav>
         {tree && node ? (
           <div
-            className={`workspace${selectedPanelPosition === "left" ? " inspector-left" : ""}`}
+            className={`workspace${inspectorOpen && (selectedPanelPosition === "left" || inspectorView === "notes") ? " inspector-left" : ""}${!inspectorOpen ? " inspector-collapsed" : ""}`}
           >
             <aside
               className="inspector"
+              id="vertex-inspector"
+              hidden={!inspectorOpen}
               data-editing={editing}
               style={{ "--node-color": color } as CSSProperties}
             >
@@ -764,54 +942,115 @@ export function App({
                 </div>
               </div>
 
-              <div className="vertex-details-slot">
-                <VertexDetails
-                  key={node.id}
-                  node={node}
-                  busy={busy}
-                  editing={editing}
-                  run={run}
-                  configure={() => {
-                    setVertexSettings(
-                      node.vertex?.kind === "thought"
-                        ? { kind: "thought", text: thoughtText(node) }
-                        : (node.vertex ?? { kind: "vanilla" }),
-                    );
-                    setDialog("vertex");
-                  }}
-                />
-              </div>
+              {inspectorView === "notes" ? (
+                <div className="inspector-note-view">
+                  <button
+                    className="quiet-button"
+                    onClick={() => setInspectorView("details")}
+                  >
+                    <Icon name="sidebar" size={14} /> Details
+                  </button>
+                  <InspectorNotes
+                    key={node.id}
+                    node={node}
+                    busy={busy}
+                    run={run}
+                  />
+                </div>
+              ) : (
+                <>
+                  <div className="vertex-details-slot">
+                    <VertexDetails
+                      key={node.id}
+                      node={node}
+                      busy={busy}
+                      editing={editing}
+                      run={run}
+                      changeHistory={() => setDialog("habitHistory")}
+                      configure={() => {
+                        setVertexSettings(
+                          node.vertex?.kind === "thought"
+                            ? { kind: "thought", text: thoughtText(node) }
+                            : (node.vertex ?? { kind: "vanilla" }),
+                        );
+                        setDialog("vertex");
+                      }}
+                    />
+                  </div>
 
-              <div className="child-list" aria-label="Child vertices">
-                {children.length ? (
-                  children.map((child) => (
-                    <button
-                      key={child.id}
-                      onClick={() => setSelected(child.id)}
-                    >
-                      <span
-                        className="child-dot"
-                        style={{ background: nodeColor(child) }}
-                      />
-                      <span>{child.title}</span>
-                      <small>{shortTime(time.get(child.id) ?? 0)}</small>
-                    </button>
-                  ))
-                ) : (
-                  <span className="no-children">No child vertices</span>
-                )}
-              </div>
+                  <div
+                    className="child-list"
+                    role="group"
+                    aria-label={
+                      bucketSelected ? "Bucket contents" : "Child vertices"
+                    }
+                  >
+                    {bucketSelected && (
+                      <span className="bucket-contents-label">
+                        Contents ({listedVertices.length})
+                      </span>
+                    )}
+                    {listedVertices.length ? (
+                      listedVertices.map((child) => (
+                        <button
+                          key={child.id}
+                          onClick={() => setSelected(child.id)}
+                        >
+                          <span
+                            className="child-dot"
+                            style={{ background: nodeColor(child) }}
+                          />
+                          <span>{child.title}</span>
+                          {!bucketSelected && (
+                            <small>{shortTime(time.get(child.id) ?? 0)}</small>
+                          )}
+                        </button>
+                      ))
+                    ) : (
+                      <span className="no-children">
+                        {bucketSelected
+                          ? "No vertices in this bucket yet"
+                          : "No child vertices"}
+                      </span>
+                    )}
+                  </div>
+                </>
+              )}
             </aside>
             <section className="map-panel">
+              <button
+                className="icon-button inspector-toggle"
+                aria-label={
+                  inspectorOpen ? "Hide vertex panel" : "Show vertex panel"
+                }
+                title={
+                  inspectorOpen ? "Hide vertex panel" : "Show vertex panel"
+                }
+                aria-expanded={inspectorOpen}
+                aria-controls="vertex-inspector"
+                onClick={() => {
+                  setContextInspector(false);
+                  setInspectorOpen((open) => !open);
+                }}
+              >
+                <Icon name="sidebar" size={18} />
+              </button>
               <Graph
                 key={tree.id}
-                rememberSize={!practice}
+                rememberView={!practice}
                 editing={editing}
                 state={state}
                 treeId={tree.id}
                 selected={node.id}
                 time={time}
                 select={setSelected}
+                contextMenu={openContextMenu}
+                emptyClick={() => {
+                  if (contextInspector) {
+                    setContextInspector(false);
+                    setInspectorOpen(false);
+                  }
+                }}
                 openThought={(id) => {
                   const thought = state.nodes.find((item) => item.id === id);
                   if (!thought) return;
@@ -851,7 +1090,7 @@ export function App({
                     }
                     onClick={() => setDialog("complete")}
                   >
-                    <Icon name="check" size={22} />
+                    <Icon name="finish" size={22} />
                     <span className="graph-tool-tooltip" aria-hidden="true">
                       Finish subgoal
                     </span>
@@ -1058,7 +1297,9 @@ export function App({
                     initially assigned colors. Pedantic requires the whole graph
                     to be connected, and all vertices with the same color to
                     form one connected subtree. New hypertrees have pedantic
-                    disabled by default.
+                    disabled by default. Standalone thoughts and buckets are
+                    excluded. Bucket membership groups vertices visually without
+                    changing tree connections.
                   </p>
                 </div>
               </div>
@@ -1177,14 +1418,6 @@ export function App({
                 void create(event);
               }}
             >
-              {dialog === "child" &&
-                newVertex.kind === "thought" &&
-                tree?.pedantic && (
-                  <p className="creation-hint">
-                    Turn off pedantic in Options to create an isolated vertex.
-                    Connect it before enabling pedantic again.
-                  </p>
-                )}
               <label className="creation-name">
                 {dialog === "tree"
                   ? "Hypertree name"
@@ -1217,93 +1450,124 @@ export function App({
                   />
                 )}
               </label>
-              {dialog === "child" && newVertex.kind !== "thought" && (
-                <VertexFields
-                  value={newVertex}
-                  onChange={setNewVertex}
-                  disabled={busy}
-                />
-              )}
-              {dialog === "child" && newVertex.kind !== "thought" && node && (
-                <div className="creation-links">
-                  <label>
-                    Parent vertex
-                    <select
-                      aria-label="Parent vertex"
-                      value={newParentId}
-                      disabled={busy}
-                      onChange={(event) => setNewParentId(event.target.value)}
-                    >
-                      <option value="" disabled={tree?.pedantic}>
-                        No parent (isolated)
-                      </option>
-                      {state.nodes
-                        .filter(
-                          (item) =>
-                            item.treeId === tree?.id &&
-                            item.finishedAt === undefined,
-                        )
-                        .map((item) => (
-                          <option key={item.id} value={item.id}>
-                            {item.title}
-                          </option>
-                        ))}
-                    </select>
-                  </label>
-                  <label>
-                    Link another hypertree
-                    <select
-                      aria-label="Link another hypertree"
-                      value={linkedTreeId}
-                      onChange={(event) => {
-                        setLinkedTreeId(event.target.value);
-                        const previousLink = state.trees.find(
-                          (item) => item.id === linkedTreeId,
-                        );
-                        const nextLink = state.trees.find(
-                          (item) => item.id === event.target.value,
-                        );
-                        if (!newName.trim() || newName === previousLink?.title)
-                          setNewName(nextLink?.title ?? "");
-                      }}
-                    >
-                      <option value="">No hypertree link</option>
-                      <optgroup label="Link another hypertree">
-                        {state.trees
-                          .filter((tree) =>
-                            canLinkTree(state, node.treeId, tree.id),
+              {dialog === "child" &&
+                newVertex.kind !== "thought" &&
+                newVertex.kind !== "bucket" && (
+                  <VertexFields
+                    value={newVertex}
+                    onChange={setNewVertex}
+                    disabled={busy}
+                  />
+                )}
+              {dialog === "child" &&
+                newVertex.kind !== "thought" &&
+                newVertex.kind !== "bucket" &&
+                node && (
+                  <div className="creation-links">
+                    <label>
+                      Parent vertex
+                      <select
+                        aria-label="Parent vertex"
+                        value={newParentId}
+                        disabled={busy}
+                        onChange={(event) => setNewParentId(event.target.value)}
+                      >
+                        <option value="" disabled={tree?.pedantic}>
+                          No parent (isolated)
+                        </option>
+                        {state.nodes
+                          .filter(
+                            (item) =>
+                              item.treeId === tree?.id &&
+                              item.finishedAt === undefined,
                           )
-                          .map((tree) => (
-                            <option key={tree.id} value={tree.id}>
-                              {tree.title}
+                          .map((item) => (
+                            <option key={item.id} value={item.id}>
+                              {item.title}
                             </option>
                           ))}
-                      </optgroup>
-                    </select>
-                    {linkedTreeId && (
-                      <p>
-                        Its live total contributes to this vertex and its
-                        ancestors. The original hypertree stays in its own tab.
-                      </p>
-                    )}
-                  </label>
-                </div>
-              )}
+                      </select>
+                    </label>
+                    <label>
+                      Link another hypertree
+                      <select
+                        aria-label="Link another hypertree"
+                        value={linkedTreeId}
+                        onChange={(event) => {
+                          setLinkedTreeId(event.target.value);
+                          const previousLink = state.trees.find(
+                            (item) => item.id === linkedTreeId,
+                          );
+                          const nextLink = state.trees.find(
+                            (item) => item.id === event.target.value,
+                          );
+                          if (
+                            !newName.trim() ||
+                            newName === previousLink?.title
+                          )
+                            setNewName(nextLink?.title ?? "");
+                        }}
+                      >
+                        <option value="">No hypertree link</option>
+                        <optgroup label="Link another hypertree">
+                          {state.trees
+                            .filter((tree) =>
+                              canLinkTree(state, node.treeId, tree.id),
+                            )
+                            .map((tree) => (
+                              <option key={tree.id} value={tree.id}>
+                                {tree.title}
+                              </option>
+                            ))}
+                        </optgroup>
+                      </select>
+                      {linkedTreeId && (
+                        <p>
+                          Its live total contributes to this vertex and its
+                          ancestors. The original hypertree stays in its own
+                          tab.
+                        </p>
+                      )}
+                    </label>
+                  </div>
+                )}
               <button
                 className="primary-button"
                 type="submit"
                 disabled={
                   busy ||
                   (dialog === "child" &&
-                    (newVertex.kind === "thought"
-                      ? tree?.pedantic
-                      : !newParentId && tree?.pedantic))
+                    newVertex.kind !== "thought" &&
+                    newVertex.kind !== "bucket" &&
+                    !newParentId &&
+                    tree?.pedantic)
                 }
               >
                 {dialog === "tree" ? "Create hypertree" : "Create vertex"}
                 <Icon name="plus" />
               </button>
             </form>
+          </Dialog>
+        )}
+        {contextMenu && contextNode && (
+          <VertexContextMenu
+            title={contextNode.title}
+            x={contextMenu.x}
+            y={contextMenu.y}
+            items={contextItems}
+            choose={chooseContextAction}
+            close={closeContextMenu}
+          />
+        )}
+        {dialog === "habitHistory" && node?.vertex?.kind === "habit" && (
+          <Dialog label="Change habit history" close={() => setDialog(null)}>
+            <HabitHistoryEditor
+              key={node.id}
+              node={node}
+              busy={busy}
+              run={run}
+              close={() => setDialog(null)}
+            />
           </Dialog>
         )}
         {dialog === "vertex" && node && (
@@ -1550,7 +1814,7 @@ export function App({
                   });
                 }}
               >
-                Finish goal <Icon name="check" />
+                Finish goal <Icon name="finish" />
               </button>
             </div>
           </Dialog>
@@ -1568,6 +1832,8 @@ export function App({
               {node.id === node.treeId
                 ? "This removes the entire hypertree, including any disconnected subtrees when pedantic is off."
                 : "This removes the subtree rooted at this vertex, including all descendants."}{" "}
+              {node.vertex?.kind === "bucket" &&
+                " Bucket contents are released; only tree descendants are removed."}{" "}
               Vertices removed:{" "}
               {node.id === node.treeId
                 ? state.nodes.filter((item) => item.treeId === node.treeId)

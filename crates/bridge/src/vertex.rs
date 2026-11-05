@@ -19,6 +19,7 @@ pub enum HabitInterval {
 pub enum Vertex {
     #[default]
     Vanilla,
+    Bucket,
     Deadline {
         deadline_at: u64,
     },
@@ -51,6 +52,10 @@ fn is_zero_pages(value: &u32) -> bool {
 }
 
 impl Vertex {
+    pub fn allows_isolation(&self) -> bool {
+        matches!(self, Self::Thought { .. } | Self::Bucket)
+    }
+
     pub fn validate_new(&self) -> Result<(), String> {
         self.validate()?;
         if matches!(self, Self::Habit { completions, .. } if !completions.is_empty()) {
@@ -192,7 +197,9 @@ pub fn place_new(mut document: Document, id: &str, parent_id: &str) -> Result<Do
         score(a).total_cmp(&score(b))
     });
     let width = |vertex: &Vertex| {
-        if matches!(vertex, Vertex::Thought { .. }) {
+        if matches!(vertex, Vertex::Bucket) {
+            260.0
+        } else if matches!(vertex, Vertex::Thought { .. }) {
             180.0
         } else {
             90.0
@@ -209,7 +216,16 @@ pub fn place_new(mut document: Document, id: &str, parent_id: &str) -> Result<Do
             other.id == id
                 || other.tree_id != tree_id
                 || (other.x - x).abs() >= width(&other.vertex) + half_width + 16.0
-                || (other.y - y).abs() >= 140.0
+                || (other.y - y).abs()
+                    >= (if matches!(other.vertex, Vertex::Bucket) {
+                        180.0
+                    } else {
+                        70.0
+                    }) + (if matches!(document.nodes[index].vertex, Vertex::Bucket) {
+                        180.0
+                    } else {
+                        70.0
+                    }) + 16.0
         })
     };
     let point = candidates
@@ -220,9 +236,24 @@ pub fn place_new(mut document: Document, id: &str, parent_id: &str) -> Result<Do
                 .nodes
                 .iter()
                 .filter(|node| node.id != id && node.tree_id == tree_id)
-                .map(|node| node.y)
+                .map(|node| {
+                    node.y
+                        + if matches!(node.vertex, Vertex::Bucket) {
+                            180.0
+                        } else {
+                            110.0
+                        }
+                })
                 .fold(130.0, f64::max);
-            (desired.0, bottom + 170.0)
+            (
+                desired.0,
+                bottom
+                    + if matches!(document.nodes[index].vertex, Vertex::Bucket) {
+                        204.0
+                    } else {
+                        134.0
+                    },
+            )
         });
     document.nodes[index].x = point.0;
     document.nodes[index].y = point.1;

@@ -371,7 +371,7 @@ h2 {
 }
 .goal[data-vertex-kind="thought"] .node-title {
   font-size: 17px;
-  font-style: italic;
+  font-style: normal;
 }
 .graph {
   position: relative;
@@ -382,6 +382,7 @@ h2 {
   overflow: hidden;
 }
 .graph-svg {
+  user-select: none;
   width: 100%;
   height: 100%;
   touch-action: none;
@@ -445,6 +446,7 @@ h2 {
   filter: drop-shadow(0 0 5px #dfc49188);
 }
 .canvas-controls {
+  pointer-events: none;
   position: absolute;
   bottom: 9px;
   left: 14px;
@@ -460,6 +462,7 @@ h2 {
   margin-right: auto;
 }
 .canvas-controls .icon-button {
+  pointer-events: auto;
   width: 26px;
   height: 26px;
   font-size: 17px;
@@ -1414,11 +1417,57 @@ button:disabled {
   padding: 3px 5px;
   font-size: 12px;
 }
-.reading-progress progress {
-  width: 60px;
-  height: 6px;
+.reading-progress-meter {
+  display: flex;
+  align-items: center;
   align-self: center;
-  accent-color: var(--gold);
+  gap: 9px;
+  flex: 1 1 110px;
+  min-width: 100px;
+}
+.reading-progress progress {
+  appearance: none;
+  -webkit-appearance: none;
+  display: block;
+  flex: 1;
+  min-width: 40px;
+  width: 100%;
+  height: 7px;
+  overflow: hidden;
+  border: 1px solid #58647470;
+  border-radius: 5px;
+  background: #0d151d;
+  color: var(--node-color, var(--gold));
+}
+.reading-progress progress::-webkit-progress-bar {
+  background: #0d151d;
+  border-radius: 5px;
+}
+.reading-progress progress::-webkit-progress-value {
+  background: var(--node-color, var(--gold));
+  border-radius: 4px;
+  transition: width 180ms ease;
+}
+.reading-progress progress::-moz-progress-bar {
+  background: var(--node-color, var(--gold));
+  border-radius: 4px;
+}
+.reading-progress-value {
+  color: var(--node-color, var(--gold));
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  min-width: 34px;
+  text-align: right;
+}
+.reading-progress input {
+  background: #101820;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  color: #cbd9df;
+}
+.reading-progress input:focus-visible {
+  outline: 1px solid var(--node-color, var(--gold));
+  outline-offset: 1px;
 }
 .habit-history {
   position: relative;
@@ -2290,7 +2339,7 @@ button:disabled {
   width: 100%;
 }
 .inspector-left .reading-progress button,
-.inspector-left .reading-progress progress {
+.inspector-left .reading-progress-meter {
   grid-column: 1 / -1;
 }
 .inspector-left .child-list {
@@ -2303,4 +2352,203 @@ button:disabled {
   white-space: normal;
   overflow-wrap: anywhere;
   text-align: left;
+}
+
+.bucket-outline {
+  transition:
+    fill 120ms,
+    stroke-width 120ms;
+}
+.bucket-drop-target .bucket-outline {
+  fill: #dfc49120;
+  stroke-width: 3;
+  stroke-dasharray: none;
+}
+.goal[data-vertex-kind="bucket"] .node-title {
+  font-size: 18px;
+}
+.goal[data-vertex-kind="bucket"] .node-time {
+  font-size: 11px;
+}
+
+.vertex-resize-handle {
+  cursor: nwse-resize;
+}
+.vertex-resize-handle:focus-visible {
+  outline: none;
+  filter: drop-shadow(0 0 5px #dfc491);
+}
+.canvas-controls .fit-graph-button {
+  width: auto;
+  padding: 0 8px;
+  gap: 5px;
+  font-size: 11px;
+}
+
+.bucket-contents-label {
+  flex: 0 0 auto;
+  align-self: center;
+  color: var(--muted);
+  font-size: 11px;
+  white-space: nowrap;
+}
+.inspector-left .bucket-contents-label {
+  align-self: flex-start;
+}
+
+.inspector {
+  position: relative;
+}
+.inspector[hidden] {
+  display: none !important;
+}
+.inspector-toggle {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  z-index: 5;
+  background: #101820dc;
+  border: 1px solid var(--line);
+}
+.inspector-note-view {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-height: 0;
+}
+.inspector-notes {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.inspector-notes textarea {
+  width: 100%;
+  box-sizing: border-box;
+  min-height: 200px;
+  resize: vertical;
+  font-size: 13px;
+}
+.vertex-context-menu {
+  position: fixed;
+  z-index: 100;
+  min-width: 195px;
+  max-width: calc(100vw - 16px);
+  max-height: calc(100vh - 16px);
+  overflow-y: auto;
+  padding: 5px;
+  background: #14212d;
+  border: 1px solid #596a79;
+  border-radius: 7px;
+  box-shadow: 0 12px 32px #0008;
+}
+.vertex-context-title {
+  padding: 7px 9px;
+  max-width: 240px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--muted);
+  font-size: 11px;
+  border-bottom: 1px solid var(--line);
+  margin-bottom: 4px;
+}
+.vertex-context-menu > button {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  text-align: left;
+  padding: 8px 10px;
+  border: none;
+  background: transparent;
+  color: #cbd9df;
+  border-radius: 4px;
+  font-size: 13px;
+}
+.vertex-context-menu > button:hover,
+.vertex-context-menu > button:focus-visible {
+  background: #ffffff12;
+  outline: none;
+}
+.hover-label-button {
+  position: relative;
+}
+.hover-label {
+  display: none;
+  position: absolute;
+  z-index: 30;
+  top: calc(100% + 6px);
+  left: 50%;
+  transform: translateX(-50%);
+  white-space: nowrap;
+  font-size: 11px;
+  padding: 5px 8px;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  color: #cbd9df;
+  background: #14212d;
+  pointer-events: none;
+}
+.hover-label-button:hover .hover-label,
+.hover-label-button:focus-visible .hover-label {
+  display: block;
+}
+.habit-history-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.habit-history[open] .hover-label {
+  display: none;
+}
+
+.habit-actions {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 4px;
+  flex: 0 0 auto;
+}
+.habit-actions > .icon-button,
+.habit-actions .habit-history > summary {
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  justify-content: center;
+}
+
+.habit-day-editor {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(100px, 0.7fr);
+  gap: 14px;
+}
+.habit-history-days {
+  max-height: 350px;
+  overflow-y: auto;
+}
+.habit-history-days table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+.habit-history-days th,
+.habit-history-days td {
+  text-align: left;
+  padding: 5px 8px;
+  border-bottom: 1px solid var(--line);
+}
+.habit-history-days th {
+  color: var(--muted);
+  font-weight: 500;
+}
+.habit-history-days .selected-day {
+  background: #80c9bc12;
+}
+.habit-history-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 12px;
 }

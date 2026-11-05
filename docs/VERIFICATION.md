@@ -26,8 +26,11 @@ pedantic is off. Each nonroot vertex has at most one parent, in its own hypertre
 Parent edges are acyclic. Active siblings have unique names; finished siblings
 may retain reused names. Active vertices cannot have finished parents.
 
-In pedantic mode the active host graph is connected. For every assigned color,
-the active vertices carrying that color induce a connected subtree. Multiple
+In pedantic mode the active host graph is connected after excluding standalone
+annotations. The domain flag `allows_isolation` permits thoughts and buckets with
+no parent and no active tree children to remain outside the host tree. Connected
+annotations participate in the normal checks. For every assigned color, the
+remaining active vertices carrying that color induce a connected subtree. Multiple
 colors describe overlapping hyperedges. In a forest, a nonempty induced subgraph
 is connected exactly when its edge count is one less than its vertex count; this
 is the criterion implemented by the validator.

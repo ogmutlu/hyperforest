@@ -39,8 +39,34 @@ pub struct Node {
     pub multiple_colors: bool,
     #[serde(default)]
     pub vertex: crate::vertex::Vertex,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub bucket_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub size: Option<Size>,
     pub x: f64,
     pub y: f64,
+}
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct Size {
+    pub width: f64,
+    pub height: f64,
+}
+impl Size {
+    pub fn validate(&self, vertex: &crate::vertex::Vertex) -> Result<(), String> {
+        let (width, height) = match vertex {
+            crate::vertex::Vertex::Thought { .. } => (140.0, 64.0),
+            crate::vertex::Vertex::Bucket => (240.0, 180.0),
+            _ => return Err("Only thoughts and buckets can be resized.".into()),
+        };
+        if !self.width.is_finite()
+            || !self.height.is_finite()
+            || !(width..=10000.0).contains(&self.width)
+            || !(height..=10000.0).contains(&self.height)
+        {
+            return Err("Choose a valid vertex size.".into());
+        }
+        Ok(())
+    }
 }
 fn yes() -> bool {
     true
@@ -183,7 +209,26 @@ impl Document {
             safe_number(tree.created_at)?;
         }
         for node in &self.nodes {
+            if let Some(bucket_id) = &node.bucket_id {
+                if node.id == node.tree_id
+                    || matches!(node.vertex, crate::vertex::Vertex::Bucket)
+                    || !self.nodes.iter().any(|bucket| {
+                        bucket.id == *bucket_id
+                            && bucket.tree_id == node.tree_id
+                            && bucket.finished_at.is_none()
+                            && matches!(bucket.vertex, crate::vertex::Vertex::Bucket)
+                    })
+                {
+                    return Err(
+                        "Bucket membership must reference an active bucket in the same hypertree."
+                            .into(),
+                    );
+                }
+            }
             node.vertex.validate()?;
+            if let Some(size) = &node.size {
+                size.validate(&node.vertex)?;
+            }
             if let Some(at) = node.finished_at {
                 safe_number(at)?;
             }
@@ -229,6 +274,7 @@ impl Document {
                     .transpose()?
                     .unwrap_or_default(),
                 multiple_colors: node.multiple_colors,
+                allows_isolation: node.vertex.allows_isolation(),
             });
             if node.estimate_minutes < 0.0 {
                 return Err("The estimate must be nonnegative.".into());
@@ -322,6 +368,12 @@ impl Document {
             let id = text(&node.id)?;
             let old = self.nodes.iter().find(|old| old.id == id);
             nodes.push(Node {
+                bucket_id: old.and_then(|n| n.bucket_id.clone()).filter(|id| {
+                    snapshot
+                        .nodes
+                        .iter()
+                        .any(|n| n.id == id.as_bytes() && n.finished_at.is_none())
+                }),
                 id,
                 tree_id: text(&node.tree_id)?,
                 parent_id: node.parent_id.as_deref().map(text).transpose()?,
@@ -330,6 +382,7 @@ impl Document {
                 notes: old.map(|old| old.notes.clone()).unwrap_or_default(),
                 notes_file: old.and_then(|old| old.notes_file.clone()),
                 vertex: old.map(|old| old.vertex.clone()).unwrap_or_default(),
+                size: old.and_then(|old| old.size.clone()),
                 finished_at: node.finished_at,
                 linked_tree_id: node.linked_tree_id.as_deref().map(text).transpose()?,
                 filled: old.is_none_or(|old| old.filled),

@@ -99,11 +99,17 @@ export function ReadingProgress({
       <button className="quiet-button" disabled={disabled} type="submit">
         <Icon name="check" size={14} /> Save progress
       </button>
-      <progress
-        aria-label="Saved reading progress"
-        max={100}
-        value={vertex.progressPercent ?? 0}
-      />
+      <div className="reading-progress-meter">
+        <progress
+          aria-label="Saved reading progress"
+          aria-valuetext={`${vertex.progressPercent ?? 0}% read${vertex.totalPages ? `, ${vertex.pagesRead ?? 0} of ${vertex.totalPages} pages` : ""}`}
+          max={100}
+          value={vertex.progressPercent ?? 0}
+        />
+        <span className="reading-progress-value" aria-hidden="true">
+          {vertex.progressPercent ?? 0}%
+        </span>
+      </div>
     </form>
   );
 }

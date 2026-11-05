@@ -17,7 +17,7 @@ candidate theorems.
 ## Start
 
 Linux x86-64 desktop packages are available from [GitHub Releases](https://github.com/ogmutlu/hyperforest/releases).
-Download the `.deb` and install it with `sudo apt install ./hyperforest_1.2.0_amd64.deb`.
+Download the `.deb` and install it with `sudo apt install ./hyperforest_1.3.0_amd64.deb`.
 
 Requires Node 24+, npm, Rust/Cargo, and these one-time tools:
 
@@ -38,7 +38,7 @@ then run `npm run desktop:dev`.
 ## Use
 
 On first launch, the website and desktop app offer an interactive practice
-walkthrough. Use the actual controls to create all five vertex kinds, drag and
+walkthrough. Use the actual controls to create vertices, drag and
 connect a vertex, save a note and focus session, count a habit repetition, and
 filter session history. The guide highlights the relevant controls and advances
 when you perform each action. Practice runs in memory; it does not change your
@@ -47,20 +47,33 @@ it on this device. Use **Tutorial** at the bottom to practice again, including
 before choosing a desktop directory.
 
 Create a hypertree. The right column holds Edit graph and Options at the top,
-then a divider and five creation buttons below. Hover or focus a symbol to see
+then a divider and six creation buttons below. Hover or focus a symbol to see
 its name. New vertices default to children of the current selection. The parent and
 hypertree-link selectors sit side by side below the name and type settings;
 you can choose another parent or create an isolated vertex. The chosen parent
-stays selected after creation. Thoughts are the exception: they start isolated
-and ask only for their text. Choose a vanilla goal, a deadline with a live
+stays selected after creation. Thoughts and buckets are the exceptions: they start isolated
+and ask only for their text or name. Choose a vanilla goal, a deadline with a live
 countdown, a thought, a reading with an optional file path or website, or a habit
 with a repetition target per day, week, or month.
 
 Thought headings use the first few words. Longer text is previewed inside the
-oval with three dots; click it to open the full editable text. Reading progress
+rounded card with three dots; single-click to select it, or double-click to open
+the full editable text. Reading progress
 can be saved as a percentage or as pages read out of a total; the two update
 together. Reading websites open in a new browser tab; desktop attachments open
 in the system viewer. Backup ZIPs retain attachment paths, not their files.
+
+In edit mode, drag the bottom-right handle of a thought or bucket to resize it.
+Sizes are saved, and thought previews wrap to fit. The **Show all** button at the
+bottom left fits every visible vertex into the graph area.
+
+Thought cards snap edge-to-edge when dragged close together. Create a bucket and
+drop vertices inside to group them visually. Select a bucket to see its contents
+in the inspector; select a listed vertex to inspect it. Drag the bucket to carry its contents,
+or drag a member out to release it. Buckets expand to fit their contents, retain
+membership across reloads and backups, and do not change tree connections. Standalone
+thoughts and buckets are allowed in pedantic mode. Root vertices and other buckets
+cannot be placed inside a bucket.
 
 Record and undo habit repetitions from the selected vertex's counter. **History**
 next to it opens a monthly calendar with recorded days in green. Weeks start on
@@ -71,7 +84,7 @@ stay unchanged. Use **Fit graph** to see vertices beyond the current view, or
 **Arrange vertices** in edit mode to request a new layout. Enable **Edit graph**
 to drag vertices and reconnect edge handles. Drag the graph’s bottom-right corner to resize its height;
 the chosen height is remembered on this device across hypertrees and restarts.
-Switching hypertrees opens the view with the root at the top center of the graph,
+Switching hypertrees restores the last pan and zoom of that tab,
 without moving any saved vertices.
 Color, finish, and delete appear
 as a vertical icon strip to the left of the right toolbar. The panel above the
@@ -85,8 +98,23 @@ screens and above on narrow screens; an explicit choice takes precedence and is 
 this device for web and desktop. Choose **Automatic (screen size)** to restore
 the responsive default.
 
+Use the **Hide vertex panel** toggle to collapse the inspector; its state is
+remembered on this device. Right-click a vertex (or press Shift+F10 while it is
+focused) for Notes, Details, bucket contents, and the relevant editing actions.
+If a context-menu action opens a closed panel, clicking empty graph space closes
+it again. A panel that was already open stays open.
+
+Habit actions form a compact horizontal row. Record, history, and history-edit
+labels appear on hover or keyboard focus. **Change habit history** edits counts
+by date, with recorded days paginated in groups of 14. Setting a day's count to
+zero removes its repetitions; other days and their timestamps are preserved.
+
+The graph remembers each tab's pan and zoom on this device across reloads and
+tree switches. Tutorial practice keeps its own temporary view.
+
 **Options (gear) → pedantic** requires
-connected graphs and connected color classes. It is off by default.
+connected graphs and connected color classes, excluding standalone thoughts and
+buckets. It is off by default.
 
 Double-click a goal or select **Focus** to start its timer. **Pause** freezes the
 large timer in place; **Resume** continues it. Space toggles pause/resume in the
