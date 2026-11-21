@@ -63,6 +63,7 @@ pub fn apply(state: &mut Snapshot, command: Command, now: u64) -> Result<(), Err
                 colors: vec![],
                 multiple_colors: false,
                 allows_isolation: false,
+                habit: None,
             });
         }
         Command::Add {
@@ -72,8 +73,12 @@ pub fn apply(state: &mut Snapshot, command: Command, now: u64) -> Result<(), Err
             title,
             linked_tree_id,
             allows_isolation,
+            habit,
         } => {
             tree_index(state, &tree_id)?;
+            if let Some(ref habit) = habit {
+                crate::habit::validate_new_habit(habit)?;
+            }
             let mut color = None;
             let mut colors = vec![];
             let mut multiple_colors = false;
@@ -107,7 +112,111 @@ pub fn apply(state: &mut Snapshot, command: Command, now: u64) -> Result<(), Err
                 colors,
                 multiple_colors,
                 allows_isolation,
+                habit,
             });
+        }
+        Command::ConfigureHabit {
+            id,
+            frequency,
+            interval,
+            weekdays,
+            measure,
+        } => {
+            let index = active_node(state, &id)?;
+            let Some(habit) = &mut state.nodes[index].habit else {
+                return Err(Error::NotHabit);
+            };
+            if !crate::habit::measure_compatible(habit.measure, measure) {
+                return Err(Error::HabitKindMismatch);
+            }
+            if let Some(m) = measure {
+                crate::habit::validate_measure(m)?;
+            }
+            habit.frequency = frequency;
+            habit.interval = interval;
+            habit.weekdays = weekdays;
+            habit.measure = measure;
+        }
+        Command::RecordHabit { id, undo, value } => {
+            let index = active_node(state, &id)?;
+            let Some(habit) = &mut state.nodes[index].habit else {
+                return Err(Error::NotHabit);
+            };
+            match habit.measure {
+                None => {
+                    if undo {
+                        habit.completions.pop().ok_or(Error::HabitHistoryEmpty)?;
+                    } else {
+                        if value.is_some() {
+                            return Err(Error::InvalidHabit);
+                        }
+                        if habit.completions.last().is_some_and(|last| *last > now) {
+                            return Err(Error::InvalidTime);
+                        }
+                        if habit.completions.len() >= MAX_HABIT_RECORDS {
+                            return Err(Error::InvalidHabit);
+                        }
+                        habit.completions.push(now);
+                    }
+                }
+                Some(measure) => {
+                    if undo {
+                        habit.entries.pop().ok_or(Error::HabitHistoryEmpty)?;
+                    } else {
+                        let Some(val) = value else {
+                            return Err(Error::InvalidHabit);
+                        };
+                        crate::habit::validate_value(measure, val)?;
+                        if habit.entries.last().is_some_and(|last| last.at > now) {
+                            return Err(Error::InvalidTime);
+                        }
+                        if habit.entries.len() >= MAX_HABIT_RECORDS {
+                            return Err(Error::InvalidHabit);
+                        }
+                        habit.entries.push(HabitEntry {
+                            at: now,
+                            value: val,
+                        });
+                    }
+                }
+            }
+        }
+        Command::SetHabitHistory {
+            id,
+            mut completions,
+            mut entries,
+        } => {
+            let index = active_node(state, &id)?;
+            let Some(habit) = &mut state.nodes[index].habit else {
+                return Err(Error::NotHabit);
+            };
+            match habit.measure {
+                None => {
+                    if !entries.is_empty()
+                        || completions.len() > MAX_HABIT_RECORDS
+                        || completions.iter().any(|at| *at > now)
+                    {
+                        return Err(Error::InvalidHabit);
+                    }
+                    completions.sort_unstable();
+                    habit.completions = completions;
+                }
+                Some(measure) => {
+                    if !completions.is_empty() || entries.len() > MAX_HABIT_RECORDS {
+                        return Err(Error::InvalidHabit);
+                    }
+                    let mut i = 0;
+                    while i < entries.len() {
+                        if entries[i].at > now {
+                            return Err(Error::InvalidHabit);
+                        }
+                        crate::habit::validate_value(measure, entries[i].value)?;
+                        i += 1;
+                    }
+                    entries.sort_by_key(|entry| entry.at);
+                    habit.entries = entries;
+                }
+            }
         }
         Command::Edit {
             id,
@@ -380,6 +489,7 @@ pub fn apply(state: &mut Snapshot, command: Command, now: u64) -> Result<(), Err
                                     title,
                                     linked_tree_id: None,
                                     allows_isolation: false,
+                                    habit: None,
                                 },
                                 now,
                             )?;

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { Action, State } from "./model";
 import { historyStatistics } from "./domainClient";
 import {
+  habitMonthDayBoundaries,
   historyDays,
   localDateTime,
   localDay,
@@ -14,6 +15,140 @@ import { DateField } from "./DateField";
 import { loadHistoryRange, saveHistoryRange } from "./historyRange";
 
 const PAGE_SIZE = 100;
+
+const FOCUS_COLOR_TIERS = [
+  { label: "—", color: "#A4A9B3", text: "#0b1017" },
+  { label: "0.0–1.9h", color: "#DC0C00", text: "#ffffff" },
+  { label: "2.0–3.9h", color: "#ED7E07", text: "#0b1017" },
+  { label: "4.0–4.9h", color: "#D9AF00", text: "#0b1017" },
+  { label: "5.0–5.9h", color: "#00C424", text: "#0b1017" },
+  { label: "6.0–7.4h", color: "#00ADC4", text: "#0b1017" },
+  { label: "7.5h+", color: "#374DF5", text: "#ffffff" },
+] as const;
+
+function focusDayColor(ms: number): {
+  hoursText: string;
+  color: string;
+  text: string;
+} {
+  if (ms <= 0) return { hoursText: "—", color: "#A4A9B3", text: "#0b1017" };
+  const hours = Math.round((ms / 3600000) * 10) / 10;
+  const hoursText = hours.toFixed(1);
+  if (hours < 2.0) return { hoursText, color: "#DC0C00", text: "#ffffff" };
+  if (hours < 4.0) return { hoursText, color: "#ED7E07", text: "#0b1017" };
+  if (hours < 5.0) return { hoursText, color: "#D9AF00", text: "#0b1017" };
+  if (hours < 6.0) return { hoursText, color: "#00C424", text: "#0b1017" };
+  if (hours < 7.5) return { hoursText, color: "#00ADC4", text: "#0b1017" };
+  return { hoursText, color: "#374DF5", text: "#ffffff" };
+}
+
+function FocusMonthCalendar({
+  state,
+  subject,
+}: {
+  state: State;
+  subject: string;
+}) {
+  const [month, setMonth] = useState(() => {
+    const now = new Date();
+    return new Date(now.getFullYear(), now.getMonth(), 1);
+  });
+  const year = month.getFullYear();
+  const monthIndex = month.getMonth();
+  const dailyMs = useMemo(() => {
+    const boundaries = habitMonthDayBoundaries(year, monthIndex);
+    const indices = matchingSessionIndices(state.sessions, subject);
+    return historyStatistics(state, indices, boundaries).dailyMs;
+  }, [state, subject, year, monthIndex]);
+  const offset = (month.getDay() + 6) % 7;
+  const todayKey = localDay(Date.now());
+
+  return (
+    <section
+      className="history-calendar"
+      aria-label="Monthly focus calendar"
+      data-testid="history-calendar"
+    >
+      <div className="history-calendar-header">
+        <div>
+          <h3>Monthly focus</h3>
+          <p className="vertex-detail-muted">
+            Hours focused per day (1 decimal place)
+          </p>
+        </div>
+        <div className="history-calendar-nav">
+          <button
+            type="button"
+            className="quiet-button"
+            aria-label="Previous focus month"
+            onClick={() => setMonth(new Date(year, monthIndex - 1, 1))}
+          >
+            ←
+          </button>
+          <strong aria-live="polite">
+            {month.toLocaleDateString(undefined, {
+              month: "long",
+              year: "numeric",
+            })}
+          </strong>
+          <button
+            type="button"
+            className="quiet-button"
+            aria-label="Next focus month"
+            onClick={() => setMonth(new Date(year, monthIndex + 1, 1))}
+          >
+            →
+          </button>
+        </div>
+      </div>
+      <div className="history-calendar-weekdays" aria-hidden="true">
+        {["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map((day) => (
+          <span key={day}>{day}</span>
+        ))}
+      </div>
+      <div className="history-calendar-grid">
+        {Array.from({ length: offset }, (_, i) => (
+          <div key={`blank-${i}`} className="history-calendar-blank" />
+        ))}
+        {dailyMs.map((ms, index) => {
+          const dayNum = index + 1;
+          const date = new Date(year, monthIndex, dayNum, 12, 0, 0, 0);
+          const iso = localDay(date.getTime());
+          const { hoursText, color, text } = focusDayColor(ms);
+          const dateLabel = date.toLocaleDateString(undefined, {
+            year: "numeric",
+            month: "long",
+            day: "numeric",
+          });
+          return (
+            <div
+              key={iso}
+              className={`history-calendar-day${iso === todayKey ? " today" : ""}${ms === 0 ? " empty" : ""}`}
+              style={{
+                backgroundColor: ms === 0 ? undefined : color,
+                borderColor: color,
+                color: ms === 0 ? undefined : text,
+              }}
+              aria-label={`${dateLabel}: ${ms === 0 ? "0 hours" : `${hoursText} hours`}`}
+              title={`${dateLabel}: ${ms === 0 ? "No focus" : `${hoursText}h (${shortTime(ms)})`}`}
+            >
+              <span className="history-calendar-hours">{hoursText}</span>
+              <span className="history-calendar-num">{dayNum}</span>
+            </div>
+          );
+        })}
+      </div>
+      <div className="history-calendar-legend" aria-label="Focus color scale">
+        {FOCUS_COLOR_TIERS.map((tier) => (
+          <span key={tier.label} className="history-legend-item">
+            <i style={{ backgroundColor: tier.color }} />
+            {tier.label}
+          </span>
+        ))}
+      </div>
+    </section>
+  );
+}
 
 /** Presentation and editing of the saved ledger. Rust computes every statistic. */
 export function SessionHistory({
@@ -346,6 +481,7 @@ export function SessionHistory({
             </div>
           </form>
         )}
+        <FocusMonthCalendar state={state} subject={historySubject} />
 
         <p className="history-count" role="status">
           {sessions.length} of {state.sessions.length} sessions

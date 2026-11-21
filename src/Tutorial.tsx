@@ -121,15 +121,18 @@ class PracticeWorkspace extends Workspace {
       Date.now(),
     );
     const values = new Map([[WORKSPACE_KEY, JSON.stringify(state)]]);
-    super({
-      getItem: (key) => values.get(key) ?? null,
-      setItem: (key, value) => {
-        values.set(key, value);
+    super(
+      {
+        getItem: (key) => values.get(key) ?? null,
+        setItem: (key, value) => {
+          values.set(key, value);
+        },
+        removeItem: (key) => {
+          values.delete(key);
+        },
       },
-      removeItem: (key) => {
-        values.delete(key);
-      },
-    });
+      false,
+    );
   }
   override commit(action: Action, now: number): void {
     super.commit(action, now);

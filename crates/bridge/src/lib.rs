@@ -1,4 +1,5 @@
 //! JSON/WebAssembly adapter. This crate is outside the intended proof boundary.
+mod achievements;
 mod command;
 mod document;
 mod layout;
@@ -32,6 +33,10 @@ pub fn message(error: d::Error) -> String {
         EnableMultipleColors => "Enable multiple colors first.",
         InvalidTime => "Invalid focus interval or clock sample.",
         InvalidSession => "Choose a valid past start time and a positive duration ending no later than now; saved intervals must match their duration.",
+        NotHabit => "Only habits have a repetition counter or value history.",
+        InvalidHabit => "Choose valid habit settings and values.",
+        HabitHistoryEmpty => "There is no habit record to undo.",
+        HabitKindMismatch => "A habit's tracking mode cannot be changed between repetitions, numbers, and time of day.",
         Overflow => "Time arithmetic exceeds the supported range.",
         Limit => "A workspace can contain at most 2000 vertices and hypertrees.",
     }.into()
@@ -170,6 +175,96 @@ impl Domain {
             &source.as_bytes().to_vec(),
             &target.as_bytes().to_vec(),
         )
+    }
+
+    pub fn habit_period(&self, id: &str, from: f64, to: f64) -> Result<String, JsError> {
+        let index = d::graph::node_index(self.state.snapshot(), &id.as_bytes().to_vec())
+            .map_err(|e| js(message(e)))?;
+        let Some(habit) = self.state.snapshot().nodes[index].habit.as_ref() else {
+            return Err(js(message(d::Error::NotHabit)));
+        };
+        let status =
+            d::habit::evaluate_period(habit, millis(from).map_err(js)?, millis(to).map_err(js)?)
+                .map_err(|e| js(message(e)))?;
+        let total = match habit.measure {
+            Some(m) => vertex::value_from_domain(m.value_kind, status.total_value),
+            None => status.total_value as f64,
+        };
+        json(&serde_json::json!({
+            "recordedCount": status.recorded_count,
+            "qualifyingCount": status.qualifying_count,
+            "totalValue": total,
+            "state": match status.state {
+                d::habit::CompletionState::Unrecorded => "unrecorded",
+                d::habit::CompletionState::Met => "met",
+                d::habit::CompletionState::Missed => "missed",
+            },
+        }))
+        .map_err(js)
+    }
+
+    pub fn habit_periods(&self, id: &str, boundaries: &str) -> Result<String, JsError> {
+        let index = d::graph::node_index(self.state.snapshot(), &id.as_bytes().to_vec())
+            .map_err(|e| js(message(e)))?;
+        let Some(habit) = self.state.snapshot().nodes[index].habit.as_ref() else {
+            return Err(js(message(d::Error::NotHabit)));
+        };
+        let boundaries: Vec<f64> =
+            serde_json::from_str(boundaries).map_err(|error| js(error.to_string()))?;
+        let boundaries = boundaries
+            .into_iter()
+            .map(millis)
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(js)?;
+        let statuses =
+            d::habit::evaluate_periods(habit, &boundaries).map_err(|e| js(message(e)))?;
+        let items: Vec<_> = statuses
+            .iter()
+            .map(|status| {
+                let total = match habit.measure {
+                    Some(m) => vertex::value_from_domain(m.value_kind, status.total_value),
+                    None => status.total_value as f64,
+                };
+                serde_json::json!({
+                    "recordedCount": status.recorded_count,
+                    "qualifyingCount": status.qualifying_count,
+                    "totalValue": total,
+                    "state": match status.state {
+                        d::habit::CompletionState::Unrecorded => "unrecorded",
+                        d::habit::CompletionState::Met => "met",
+                        d::habit::CompletionState::Missed => "missed",
+                    },
+                })
+            })
+            .collect();
+        json(&items).map_err(js)
+    }
+
+    pub fn evaluate_achievements(&self, context: &str) -> Result<String, JsError> {
+        let ctx: achievements::CalendarContext =
+            serde_json::from_str(context).map_err(|error| js(error.to_string()))?;
+        let view = achievements::evaluate_view(&self.document, &self.state, &ctx).map_err(js)?;
+        json(&view).map_err(js)
+    }
+
+    pub fn sync_achievements(
+        &self,
+        context: &str,
+        now: f64,
+        backfill: bool,
+    ) -> Result<Domain, JsError> {
+        let ctx: achievements::CalendarContext =
+            serde_json::from_str(context).map_err(|error| js(error.to_string()))?;
+        let document = achievements::sync_document(
+            self.document.clone(),
+            &self.state,
+            &ctx,
+            millis(now).map_err(js)?,
+            backfill,
+        )
+        .map_err(js)?;
+        let state = document.domain().map_err(js)?;
+        Ok(Self { document, state })
     }
 }
 

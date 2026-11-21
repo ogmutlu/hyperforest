@@ -1,5 +1,29 @@
-import type { GoalNode, Vertex, VertexKind, VertexSettings } from "./model";
+import { habitPeriodBounds, localDayIndex, localWeekday } from "./calendar";
+import type {
+  GoalNode,
+  HabitMeasure,
+  HabitPeriodStatus,
+  Vertex,
+  VertexKind,
+  VertexSettings,
+  Weekday,
+} from "./model";
 import type { IconName } from "./icons";
+
+export const WEEKDAYS: {
+  id: Weekday;
+  short: string;
+  medium: string;
+  label: string;
+}[] = [
+  { id: "mon", short: "Mo", medium: "Mon", label: "Monday" },
+  { id: "tue", short: "Tu", medium: "Tue", label: "Tuesday" },
+  { id: "wed", short: "We", medium: "Wed", label: "Wednesday" },
+  { id: "thu", short: "Th", medium: "Thu", label: "Thursday" },
+  { id: "fri", short: "Fr", medium: "Fri", label: "Friday" },
+  { id: "sat", short: "Sa", medium: "Sat", label: "Saturday" },
+  { id: "sun", short: "Su", medium: "Sun", label: "Sunday" },
+];
 
 export const VERTEX_KINDS: {
   kind: VertexKind;
@@ -97,18 +121,155 @@ export function vertexGeometry(
   };
 }
 
-/** Local calendar boundaries, including Monday-based weeks and DST transitions. */
+/** Local calendar boundaries, including Monday-based weeks, custom weekdays, and DST transitions. */
 export function habitProgress(
   vertex: Extract<Vertex, { kind: "habit" }>,
   now: number,
 ): number {
-  const start = new Date(now);
-  start.setHours(0, 0, 0, 0);
-  if (vertex.interval === "week")
-    start.setDate(start.getDate() - ((start.getDay() + 6) % 7));
-  if (vertex.interval === "month") start.setDate(1);
-  return vertex.completions.filter((at) => at >= start.getTime() && at <= now)
-    .length;
+  const [start] = habitPeriodBounds(vertex.interval, now);
+  return vertex.completions.filter((at) => at >= start && at <= now).length;
+}
+
+export function isHabitScheduledOn(
+  vertex: Extract<Vertex, { kind: "habit" }>,
+  time: number,
+): boolean {
+  if (vertex.interval !== "custom") return true;
+  const weekday = WEEKDAYS[localWeekday(localDayIndex(time))]?.id;
+  return weekday !== undefined && (vertex.weekdays ?? []).includes(weekday);
+}
+
+export function formatHabitWeekdays(weekdays?: Weekday[]): string {
+  if (!weekdays?.length) return "";
+  const selected = new Set(weekdays);
+  return WEEKDAYS.filter((day) => selected.has(day.id))
+    .map((day) => day.medium)
+    .join(", ");
+}
+
+export function formatHabitPeriodLabel(
+  interval: Extract<Vertex, { kind: "habit" }>["interval"],
+  weekdays?: Weekday[],
+): string {
+  if (interval === "custom") {
+    const days = formatHabitWeekdays(weekdays);
+    return days ? `· ${days}` : "today";
+  }
+  return `this ${interval}`;
+}
+
+export function formatHabitNumber(value: number): string {
+  const rounded = Math.round(value * 1000) / 1000;
+  return Number.isInteger(rounded)
+    ? String(rounded)
+    : rounded.toFixed(3).replace(/0+$/, "").replace(/\.$/, "");
+}
+
+export function formatHabitTime(minutes: number): string {
+  const clamped = Math.max(0, Math.min(1439, Math.round(minutes)));
+  const hh = String(Math.floor(clamped / 60)).padStart(2, "0");
+  const mm = String(clamped % 60).padStart(2, "0");
+  return `${hh}:${mm}`;
+}
+
+export function parseHabitTime(value: string): number | null {
+  const match = /^(\d{2}):(\d{2})$/.exec(value.trim());
+  if (!match) return null;
+  const hh = Number(match[1]);
+  const mm = Number(match[2]);
+  if (hh < 0 || hh > 23 || mm < 0 || mm > 59) return null;
+  return hh * 60 + mm;
+}
+
+export function currentLocalTimeMinutes(now: number): number {
+  const d = new Date(now);
+  return d.getHours() * 60 + d.getMinutes();
+}
+
+export function formatHabitValue(measure: HabitMeasure, value: number): string {
+  if (measure.valueKind === "timeOfDay") return formatHabitTime(value);
+  const num = formatHabitNumber(value);
+  return measure.unit ? `${num} ${measure.unit}` : num;
+}
+
+export function formatHabitTarget(measure: HabitMeasure): string {
+  const op = measure.bound === "atLeast" ? "≥" : "≤";
+  return `${op} ${formatHabitValue(measure, measure.target)}`;
+}
+
+export function formatHabitProgressText(
+  vertex: Extract<Vertex, { kind: "habit" }>,
+  status: HabitPeriodStatus,
+  latestValueInPeriod?: number,
+  now?: number,
+): string {
+  const measure = vertex.measure;
+  if (
+    vertex.interval === "custom" &&
+    now !== undefined &&
+    !isHabitScheduledOn(vertex, now) &&
+    status.recordedCount === 0
+  ) {
+    const days = formatHabitWeekdays(vertex.weekdays);
+    return days ? `Rest day · ${days}` : "Rest day";
+  }
+  const periodLabel =
+    vertex.interval === "custom"
+      ? `today · ${formatHabitWeekdays(vertex.weekdays)}`
+      : vertex.interval === "day"
+        ? "today"
+        : `this ${vertex.interval}`;
+  if (!measure) {
+    return `${status.recordedCount} / ${vertex.frequency} ${formatHabitPeriodLabel(vertex.interval, vertex.weekdays)}`;
+  }
+  if (measure.valueKind === "timeOfDay") {
+    if (
+      vertex.frequency === 1 &&
+      (vertex.interval === "day" || vertex.interval === "custom")
+    ) {
+      const shown =
+        latestValueInPeriod !== undefined
+          ? formatHabitTime(latestValueInPeriod)
+          : "—";
+      return `${shown} (${formatHabitTarget(measure)}) ${periodLabel}`;
+    }
+    return `${status.qualifyingCount} / ${vertex.frequency} (${formatHabitTarget(measure)}) ${periodLabel}`;
+  }
+  const aggregate = measure.aggregate ?? "sum";
+  if (aggregate === "sum") {
+    if (measure.bound === "atMost" && status.recordedCount === 0) {
+      return `Not logged · ${formatHabitTarget(measure)} ${periodLabel}`;
+    }
+    const unit = measure.unit ? ` ${measure.unit}` : "";
+    const op = measure.bound === "atMost" ? "≤ " : "";
+    return `${formatHabitNumber(status.totalValue)} / ${op}${formatHabitNumber(measure.target)}${unit} ${periodLabel}`;
+  }
+  return `${status.qualifyingCount} / ${vertex.frequency} (${formatHabitTarget(measure)}) ${periodLabel}`;
+}
+
+export function formatHabitLifetimeText(
+  vertex: Extract<Vertex, { kind: "habit" }>,
+): string {
+  const measure = vertex.measure;
+  if (!measure) return `${vertex.completions.length} total`;
+  const entries = vertex.entries ?? [];
+  if (entries.length === 0) return "0 entries";
+  if (measure.valueKind === "timeOfDay") {
+    const avg =
+      entries.reduce((acc, item) => acc + item.value, 0) / entries.length;
+    return `Avg ${formatHabitTime(avg)} · ${entries.length} ${entries.length === 1 ? "entry" : "entries"}`;
+  }
+  const aggregate = measure.aggregate ?? "sum";
+  if (aggregate === "sum") {
+    const total = entries.reduce((acc, item) => acc + item.value, 0);
+    return `${formatHabitValue(measure, total)} total · ${entries.length} ${entries.length === 1 ? "entry" : "entries"}`;
+  }
+  const qualifying = entries.filter((item) =>
+    measure.bound === "atLeast"
+      ? item.value >= measure.target
+      : item.value <= measure.target,
+  ).length;
+  return `${qualifying} / ${entries.length} on target`;
 }
 
 export function isWebsite(resource: string): boolean {

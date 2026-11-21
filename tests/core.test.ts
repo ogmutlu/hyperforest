@@ -86,11 +86,14 @@ it("clears workspace without touching other storage", () => {
   const workspace = new Workspace(storage);
   const otherTab = new Workspace(storage);
   workspace.clear();
-  expect(workspace.getSnapshot()).toEqual(empty());
+  expect(workspace.getSnapshot()).toEqual({ ...empty(), achievements: [] });
   expect(storage.getItem("other-app")).toBe("keep");
   otherTab.refresh();
-  expect(otherTab.getSnapshot()).toEqual(empty());
-  expect(new Workspace(storage).getSnapshot()).toEqual(empty());
+  expect(otherTab.getSnapshot()).toEqual({ ...empty(), achievements: [] });
+  expect(new Workspace(storage).getSnapshot()).toEqual({
+    ...empty(),
+    achievements: [],
+  });
 });
 
 describe("focus accounting", () => {

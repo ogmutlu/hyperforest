@@ -27,7 +27,13 @@ export type IconName =
   | "external"
   | "check"
   | "finish"
-  | "sidebar";
+  | "sidebar"
+  | "trophy"
+  | "lock"
+  | "star"
+  | "flame"
+  | "volume"
+  | "volumeOff";
 export function Icon({
   name,
   size = 18,
@@ -72,6 +78,15 @@ export function Icon({
     habit:
       "M20 7a9 9 0 0 0-15-2L2 8m0-5v5h5M4 17a9 9 0 0 0 15 2l3-3m0 5v-5h-5m-8-4 2 2 4-4",
     external: "M14 3h7v7m0-7L10 14M10 4H4v16h16v-6",
+    trophy:
+      "M8 21h8m-4-4v4M7 4h10v5a5 5 0 0 1-10 0ZM7 6H4v2a3 3 0 0 0 3 3m10-5h3v2a3 3 0 0 1-3 3",
+    lock: "M7 11V7a5 5 0 0 1 10 0v4M5 11h14v10H5Z",
+    star: "m12 3 2.8 5.7 6.2.9-4.5 4.4 1.1 6.2L12 17.3 6.4 20.2l1.1-6.2L3 9.6l6.2-.9Z",
+    flame:
+      "M12 22c4.4 0 7-3.1 7-7 0-3.2-2-6.1-4.5-8.5-.3 1.8-1.3 2.8-2.5 3.3.3-3.2-.8-6-3-7.8 0 2.5-1.3 4.3-2.5 5.8C5.4 9.2 5 11.1 5 15c0 3.9 2.6 7 7 7Z",
+    volume:
+      "M11 5 6 9H2v6h4l5 4ZM15.5 8.5a5 5 0 0 1 0 7M19 5a9.5 9.5 0 0 1 0 14",
+    volumeOff: "M11 5 6 9H2v6h4l5 4ZM22 9l-6 6m0-6 6 6",
   };
   return (
     <svg

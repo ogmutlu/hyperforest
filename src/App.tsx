@@ -9,6 +9,19 @@ import { InspectorNotes } from "./InspectorNotes";
 import { HabitHistoryEditor } from "./HabitHistoryEditor";
 import { VertexContextMenu } from "./VertexContextMenu";
 import type { VertexMenuItem } from "./VertexContextMenu";
+import { AchievementToast } from "./AchievementToast";
+import type { ToastNotice } from "./AchievementToast";
+import {
+  AchievementsDialog,
+  formatAchievementProgress,
+} from "./AchievementsDialog";
+import {
+  loadAchievementPrefs,
+  loadSeenDailyWins,
+  saveAchievementPrefs,
+  saveSeenDailyWins,
+} from "./achievementPrefs";
+import { localDay } from "./calendar";
 import {
   defaultVertex,
   thoughtText,
@@ -34,13 +47,20 @@ import {
   formatTime,
   shortTime,
 } from "./presentation";
-import { canLinkTree, focusElapsed, subtreeIds, totals } from "./domainClient";
+import {
+  canLinkTree,
+  evaluateAchievements,
+  focusElapsed,
+  subtreeIds,
+  totals,
+} from "./domainClient";
 import type { Action, GoalNode, State, VertexSettings } from "./model";
 import { DesktopWorkspace, desktopEnabled } from "./desktop";
 import { openDesktopArchive, saveArchive } from "./archiveTransfer";
 import { exportArchive, archiveBackup } from "./export";
 import { Graph } from "./Graph";
 import { Icon } from "./icons";
+import type { IconName } from "./icons";
 import { STORAGE_KEY, transact, Workspace } from "./storage";
 
 function download(name: string, text: string, type = "application/json"): void {
@@ -359,11 +379,160 @@ export function App({
     | "tabs"
     | "options"
     | "history"
+    | "achievements"
     | "habitHistory"
     | "clear"
     | "import"
     | null
   >(null);
+  const [focusAchievementId, setFocusAchievementId] = useState<
+    string | undefined
+  >(undefined);
+  const [achievementPrefs, setAchievementPrefs] = useState(() =>
+    practice ? { popups: false, sound: false } : loadAchievementPrefs(),
+  );
+  const [toastQueue, setToastQueue] = useState<ToastNotice[]>([]);
+  const previousUnlockedIds = useRef<Set<string>>(
+    new Set((state.achievements ?? []).map((item) => item.id)),
+  );
+  const suppressNextAchievementToast = useRef(false);
+  const shiftToast = useCallback(() => {
+    setToastQueue((queue) => queue.slice(1));
+  }, []);
+  const updateAchievementPrefs = useCallback(
+    (next: typeof achievementPrefs) => {
+      setAchievementPrefs(next);
+      if (!practice) saveAchievementPrefs(next);
+    },
+    [practice],
+  );
+  const achievementEvaluation = useMemo(
+    () => (practice ? null : evaluateAchievements(state, Date.now())),
+    [state, practice],
+  );
+  useEffect(() => {
+    if (practice) return;
+    const count = workspace.consumeBackfilledCount();
+    if (count > 0 && achievementPrefs.popups) {
+      setToastQueue((queue) => [
+        ...queue,
+        {
+          key: `backfill-${Date.now()}`,
+          kind: "summary",
+          tier: "gold",
+          icon: "trophy",
+          eyebrow: "ACHIEVEMENTS ADDED",
+          title: `${count} achievement${count === 1 ? "" : "s"} unlocked from your history`,
+          subtitle: "Click to open your Trophy Hall.",
+          shimmer: true,
+        },
+      ]);
+    }
+  }, [workspace, practice, achievementPrefs.popups]);
+  useEffect(() => {
+    if (practice || !achievementEvaluation) return;
+    const currentIds = new Set(
+      (state.achievements ?? []).map((item) => item.id),
+    );
+    const prev = previousUnlockedIds.current;
+    previousUnlockedIds.current = currentIds;
+    if (suppressNextAchievementToast.current) {
+      suppressNextAchievementToast.current = false;
+      const dayKey = localDay(Date.now());
+      const seen = loadSeenDailyWins(dayKey);
+      for (const win of achievementEvaluation.daily) {
+        if (win.completed) seen.add(win.id);
+      }
+      saveSeenDailyWins(dayKey, seen);
+      return;
+    }
+    const notices: ToastNotice[] = [];
+    const lookup = new Map(
+      [...achievementEvaluation.core, ...achievementEvaluation.endless].map(
+        (item) => [item.id, item],
+      ),
+    );
+    for (const id of currentIds) {
+      if (prev.has(id)) continue;
+      const item = lookup.get(id);
+      if (!item) continue;
+      notices.push({
+        key: `${item.id}-${item.unlockedAt ?? Date.now()}`,
+        achievementId: item.id,
+        kind: item.endless ? "endless" : "achievement",
+        tier: item.tier,
+        icon: item.icon as IconName,
+        eyebrow: item.endless ? "ENDLESS MILESTONE" : "ACHIEVEMENT UNLOCKED",
+        title: item.title,
+        subtitle: item.description,
+        shimmer:
+          item.tier === "gold" ||
+          item.tier === "platinum" ||
+          item.hidden ||
+          item.endless,
+      });
+    }
+    const dayKey = localDay(Date.now());
+    const seenDaily = loadSeenDailyWins(dayKey);
+    let dailyChanged = false;
+    for (const win of achievementEvaluation.daily) {
+      if (win.completed && !seenDaily.has(win.id)) {
+        seenDaily.add(win.id);
+        dailyChanged = true;
+        notices.push({
+          key: `${dayKey}-${win.id}`,
+          kind: "daily",
+          tier: "daily",
+          icon: "flame",
+          eyebrow: "DAILY WIN",
+          title: win.title,
+          subtitle: win.description,
+        });
+      }
+    }
+    if (dailyChanged) saveSeenDailyWins(dayKey, seenDaily);
+    if (notices.length > 0 && achievementPrefs.popups) {
+      setToastQueue((queue) => [...queue, ...notices]);
+    }
+  }, [
+    state.achievements,
+    achievementEvaluation,
+    practice,
+    achievementPrefs.popups,
+  ]);
+  const achievementSummary = useMemo(() => {
+    if (!achievementEvaluation) return null;
+    const coreUnlocked = achievementEvaluation.core.filter(
+      (item) => item.unlockedAt !== null,
+    ).length;
+    const coreTotal = achievementEvaluation.core.length;
+    const dailyApplicable = achievementEvaluation.daily.filter(
+      (item) => item.applicable,
+    );
+    const dailyDone = dailyApplicable.filter((item) => item.completed).length;
+    const dailyTotal = dailyApplicable.length;
+    return { coreUnlocked, coreTotal, dailyDone, dailyTotal };
+  }, [achievementEvaluation]);
+  const trophyTooltip = useMemo(() => {
+    if (!achievementEvaluation || !achievementSummary) return "Achievements";
+    const { coreUnlocked, coreTotal, dailyDone, dailyTotal } =
+      achievementSummary;
+    const next = [
+      ...achievementEvaluation.core,
+      ...achievementEvaluation.endless,
+    ]
+      .filter(
+        (item) =>
+          item.unlockedAt === null &&
+          !item.hidden &&
+          item.target > 1 &&
+          item.current > 0,
+      )
+      .sort((a, b) => b.current / b.target - a.current / a.target)[0];
+    const base = `Achievements · Core ${coreUnlocked}/${coreTotal} · Today ${dailyDone}/${dailyTotal}`;
+    if (!next) return base;
+    return `${base} · Next: ${next.title} (${formatAchievementProgress(next.current, next.target, next.unit)})`;
+  }, [achievementEvaluation, achievementSummary]);
   const [pendingImport, setPendingImport] = useState<State | null>(null);
   const [editing, setEditing] = useState(false);
   const [inspectorOpen, setInspectorOpen] = useState(() => {
@@ -557,9 +726,11 @@ export function App({
         ...(contextNode.vertex?.kind === "habit"
           ? [
               {
-                label: "Record repetition",
+                label: contextNode.vertex.measure
+                  ? "Log habit value"
+                  : "Record repetition",
                 icon: "plus" as const,
-                action: "recordHabit",
+                action: contextNode.vertex.measure ? "details" : "recordHabit",
                 disabled: busy || contextNode.finishedAt !== undefined,
               },
             ]
@@ -727,6 +898,7 @@ export function App({
     if (!pendingImport) return;
     setBusy(true);
     try {
+      suppressNextAchievementToast.current = true;
       await transact(() => workspace.replace(JSON.stringify(pendingImport)));
       setSelected(null);
       setTreeId(workspace.getSnapshot().trees[0]?.id ?? "");
@@ -787,6 +959,55 @@ export function App({
             >
               <Icon name="history" size={22} />
             </button>
+            {!practice && (
+              <button
+                className="icon-button achievements-button"
+                aria-label="Achievements"
+                title={trophyTooltip}
+                onClick={() => {
+                  setFocusAchievementId(undefined);
+                  setDialog("achievements");
+                }}
+              >
+                <Icon name="trophy" size={20} />
+                {achievementSummary && (
+                  <span
+                    className="achievements-status-bars"
+                    data-testid="achievements-status-bars"
+                    aria-hidden="true"
+                  >
+                    <span className="achievements-mini-row">
+                      <span className="achievements-mini-track">
+                        <span
+                          className="achievements-mini-fill core"
+                          style={{
+                            width: `${achievementSummary.coreTotal ? Math.round((achievementSummary.coreUnlocked / achievementSummary.coreTotal) * 100) : 0}%`,
+                          }}
+                        />
+                      </span>
+                      <span className="achievements-mini-count">
+                        {achievementSummary.coreUnlocked}/
+                        {achievementSummary.coreTotal}
+                      </span>
+                    </span>
+                    <span className="achievements-mini-row">
+                      <span className="achievements-mini-track">
+                        <span
+                          className="achievements-mini-fill daily"
+                          style={{
+                            width: `${achievementSummary.dailyTotal ? Math.round((achievementSummary.dailyDone / achievementSummary.dailyTotal) * 100) : 0}%`,
+                          }}
+                        />
+                      </span>
+                      <span className="achievements-mini-count">
+                        {achievementSummary.dailyDone}/
+                        {achievementSummary.dailyTotal}
+                      </span>
+                    </span>
+                  </span>
+                )}
+              </button>
+            )}
           </div>
           <div className="top-actions">
             <button
@@ -962,6 +1183,7 @@ export function App({
                   <div className="vertex-details-slot">
                     <VertexDetails
                       key={node.id}
+                      state={state}
                       node={node}
                       busy={busy}
                       editing={editing}
@@ -1595,6 +1817,7 @@ export function App({
                 value={vertexSettings}
                 onChange={setVertexSettings}
                 disabled={busy || node.finishedAt !== undefined}
+                lockHabitMode
               />
               <button
                 className="primary-button"
@@ -1887,6 +2110,7 @@ export function App({
                 disabled={busy}
                 onClick={() => {
                   setBusy(true);
+                  suppressNextAchievementToast.current = true;
                   void transact(() => workspace.clear())
                     .then(() => {
                       setTreeId("");
@@ -1967,6 +2191,28 @@ export function App({
               run={run}
             />
           </Dialog>
+        )}
+        {dialog === "achievements" && achievementEvaluation && (
+          <AchievementsDialog
+            evaluation={achievementEvaluation}
+            prefs={achievementPrefs}
+            onChangePrefs={updateAchievementPrefs}
+            focusAchievementId={focusAchievementId}
+            close={() => setDialog(null)}
+          />
+        )}
+        {!practice && (
+          <AchievementToast
+            queue={toastQueue}
+            paused={focus !== null && !focusMinimized}
+            aboveDock={focus !== null && focusMinimized}
+            soundEnabled={achievementPrefs.sound}
+            onShift={shiftToast}
+            onInspect={(id) => {
+              setFocusAchievementId(id);
+              setDialog("achievements");
+            }}
+          />
         )}
         {error && !dialog && !running && (
           <div className="toast" role="alert">

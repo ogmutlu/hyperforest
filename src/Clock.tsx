@@ -1,9 +1,16 @@
 /** Clock subscriptions live in the small components that display changing time. */
 import { useEffect, useState } from "react";
-import { focusElapsed, todayTime } from "./domainClient";
+import { focusElapsed, habitPeriod, todayTime } from "./domainClient";
+import { habitPeriodBounds } from "./calendar";
 import { formatTime } from "./presentation";
 import type { Focus, State, Vertex } from "./model";
-import { habitProgress } from "./vertices";
+import {
+  formatHabitPeriodLabel,
+  formatHabitProgressText,
+  formatHabitWeekdays,
+  habitProgress,
+  isHabitScheduledOn,
+} from "./vertices";
 
 function useNow(interval: number | null, revision: object | number): number {
   const [now, setNow] = useState(Date.now);
@@ -31,14 +38,52 @@ export function DeadlineTimer({ deadlineAt }: { deadlineAt: number }) {
 }
 export function HabitProgress({
   vertex,
+  state,
+  nodeId,
 }: {
   vertex: Extract<Vertex, { kind: "habit" }>;
+  state?: State;
+  nodeId?: string;
 }) {
   const now = useNow(10000, vertex);
+  if (!vertex.measure) {
+    const progress = habitProgress(vertex, now);
+    if (
+      vertex.interval === "custom" &&
+      !isHabitScheduledOn(vertex, now) &&
+      progress === 0
+    ) {
+      const days = formatHabitWeekdays(vertex.weekdays);
+      return (
+        <span className="habit-rest-day">
+          {days ? `Rest day · ${days}` : "Rest day"}
+        </span>
+      );
+    }
+    return (
+      <>
+        {progress} / {vertex.frequency}{" "}
+        {formatHabitPeriodLabel(vertex.interval, vertex.weekdays)}
+      </>
+    );
+  }
+  const [from, to] = habitPeriodBounds(vertex.interval, now);
+  const status =
+    state && nodeId
+      ? habitPeriod(state, nodeId, from, Math.min(to, now + 1))
+      : {
+          recordedCount: 0,
+          qualifyingCount: 0,
+          totalValue: 0,
+          state: "unrecorded" as const,
+        };
+  const latestInPeriod = (vertex.entries ?? [])
+    .filter((entry) => entry.at >= from && entry.at <= now)
+    .at(-1)?.value;
   return (
-    <>
-      {habitProgress(vertex, now)} / {vertex.frequency} this {vertex.interval}
-    </>
+    <span className={`habit-state-${status.state}`}>
+      {formatHabitProgressText(vertex, status, latestInPeriod, now)}
+    </span>
   );
 }
 export function FocusTimer({ focus }: { focus: Focus }) {

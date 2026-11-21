@@ -1,6 +1,13 @@
 /** Thin adapter to the Rust domain. No business rules are implemented here. */
 import init, { Domain, focus_elapsed } from "./generated/hyperforest_bridge";
-import type { Action, Focus, State } from "./model";
+import { achievementCalendarContext, localDayIndex } from "./calendar";
+import type {
+  AchievementEvaluation,
+  Action,
+  Focus,
+  HabitPeriodStatus,
+  State,
+} from "./model";
 export async function initializeDomain(): Promise<void> {
   await init({
     module_or_path: new URL(
@@ -126,4 +133,57 @@ export function historyStatistics(
   return JSON.parse(
     domain(state).history(JSON.stringify(selected), JSON.stringify(boundaries)),
   ) as HistoryStatistics;
+}
+
+export function habitPeriod(
+  state: State,
+  id: string,
+  from: number,
+  to: number,
+): HabitPeriodStatus {
+  return JSON.parse(
+    domain(state).habit_period(id, from, to),
+  ) as HabitPeriodStatus;
+}
+
+export function habitPeriods(
+  state: State,
+  id: string,
+  boundaries: number[],
+): HabitPeriodStatus[] {
+  return JSON.parse(
+    domain(state).habit_periods(id, JSON.stringify(boundaries)),
+  ) as HabitPeriodStatus[];
+}
+
+interface AchievementCacheEntry {
+  day: number;
+  value: AchievementEvaluation;
+}
+const achievementCache = new WeakMap<State, AchievementCacheEntry>();
+
+export function evaluateAchievements(
+  state: State,
+  now: number,
+): AchievementEvaluation {
+  const day = localDayIndex(now);
+  const cached = achievementCache.get(state);
+  if (cached && cached.day === day) return cached.value;
+  const ctx = achievementCalendarContext(state, now);
+  const value = JSON.parse(
+    domain(state).evaluate_achievements(JSON.stringify(ctx)),
+  ) as AchievementEvaluation;
+  achievementCache.set(state, { day, value });
+  return value;
+}
+
+export function syncAchievements(
+  state: State,
+  now: number,
+  backfill = false,
+): State {
+  const ctx = achievementCalendarContext(state, now);
+  return snapshot(
+    domain(state).sync_achievements(JSON.stringify(ctx), now, backfill),
+  );
 }

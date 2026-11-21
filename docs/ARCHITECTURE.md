@@ -28,12 +28,20 @@ It uses structs, enums, vectors, slices, options, results, and integer arithmeti
 It has no GUI types, floating-point coordinates, JSON, serde, system calls,
 randomness, wall-clock access, threads, or asynchronous code.
 
-- `model.rs`: records, command enum, error enum, limits, and color identities.
+- `model.rs`: records, habit types, command enum, error enum, limits, and color identities.
 - `lib.rs`: `State` contains a private validated `Snapshot`.
-- `validation.rs`: graph, identity, color-connectivity, and interval invariants.
+- `validation.rs`: graph, identity, color-connectivity, habit, and interval invariants.
 - `transition.rs`: command effects on a candidate snapshot.
+- `habit.rs`: pure integer habit validation, lower/upper-bound period completion, and streaks.
 - `graph.rs`: paths, descendants, links, and color assignment.
 - `time.rs`: interval overlap, live focus duration, and cumulative totals.
+
+`hyperforest-achievements` (`crates/achievements`) is a separate `#![no_std]` +
+`alloc` crate depending only on `hyperforest-domain` (zero external dependencies,
+no floats, no serde, no strings). It evaluates core achievements, open-ended
+milestone series, and resetting daily early wins, and latches permanent unlocks
+monotonically. Presentation copy, YAML slugs, and metadata projection live in
+`crates/bridge/src/achievements.rs`.
 
 `Snapshot` is an untrusted interchange value. `State::new(snapshot)` validates it.
 `State::apply(&self, command, now)` clones the snapshot, applies the command,

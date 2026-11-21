@@ -6,7 +6,22 @@ export interface GoalTree {
   pedantic: boolean;
   showFinished: boolean;
 }
-export type HabitInterval = "day" | "week" | "month";
+export type Weekday = "mon" | "tue" | "wed" | "thu" | "fri" | "sat" | "sun";
+export type HabitInterval = "day" | "week" | "month" | "custom";
+export type HabitValueKind = "number" | "timeOfDay";
+export type HabitBound = "atLeast" | "atMost";
+export type HabitAggregate = "sum" | "perEntry";
+export interface HabitMeasure {
+  valueKind: HabitValueKind;
+  bound: HabitBound;
+  target: number;
+  unit?: string;
+  aggregate?: HabitAggregate;
+}
+export interface HabitEntry {
+  at: number;
+  value: number;
+}
 export type VertexSettings =
   | { kind: "vanilla" }
   | { kind: "bucket" }
@@ -19,11 +34,70 @@ export type VertexSettings =
       pagesRead?: number;
       totalPages?: number;
     }
-  | { kind: "habit"; frequency: number; interval: HabitInterval };
+  | {
+      kind: "habit";
+      frequency: number;
+      interval: HabitInterval;
+      weekdays?: Weekday[];
+      measure?: HabitMeasure;
+    };
 export type VertexKind = VertexSettings["kind"];
 export type Vertex =
   | Exclude<VertexSettings, { kind: "habit" }>
-  | (Extract<VertexSettings, { kind: "habit" }> & { completions: number[] });
+  | (Extract<VertexSettings, { kind: "habit" }> & {
+      completions: number[];
+      entries?: HabitEntry[];
+    });
+
+export interface UnlockedAchievement {
+  id: string;
+  unlockedAt: number;
+}
+
+export type AchievementCategory =
+  "focus" | "streaks" | "habits" | "graph" | "completion" | "notes" | "secret";
+
+export type AchievementTier = "bronze" | "silver" | "gold" | "platinum";
+export type AchievementUnit = "duration" | "count" | "days" | "none";
+
+export interface AchievementView {
+  id: string;
+  title: string;
+  description: string;
+  category: AchievementCategory;
+  tier: AchievementTier;
+  icon: string;
+  hidden: boolean;
+  endless: boolean;
+  unit: AchievementUnit;
+  unlockedAt: number | null;
+  current: number;
+  target: number;
+}
+
+export interface DailyWinView {
+  id: string;
+  title: string;
+  description: string;
+  unit: AchievementUnit;
+  completed: boolean;
+  applicable: boolean;
+  current: number;
+  target: number;
+}
+
+export interface AchievementEvaluation {
+  core: AchievementView[];
+  endless: AchievementView[];
+  daily: DailyWinView[];
+}
+
+export interface HabitPeriodStatus {
+  recordedCount: number;
+  qualifyingCount: number;
+  totalValue: number;
+  state: "unrecorded" | "met" | "missed";
+}
 
 export interface GoalNode {
   id: string;
@@ -79,6 +153,7 @@ export interface State {
   nodes: GoalNode[];
   sessions: Session[];
   focus: Focus | null;
+  achievements?: UnlockedAchievement[];
 }
 
 export type Action =
@@ -115,12 +190,14 @@ export type Action =
       vertex?: VertexSettings;
     }
   | { type: "configureVertex"; id: string; vertex: VertexSettings }
-  | { type: "recordHabit"; id: string; undo?: boolean }
+  | { type: "recordHabit"; id: string; undo?: boolean; value?: number }
   | {
       type: "setHabitHistory";
       id: string;
-      completions: number[];
+      completions?: number[];
       expected?: number[];
+      entries?: HabitEntry[];
+      expectedEntries?: HabitEntry[];
     }
   | {
       type: "edit";

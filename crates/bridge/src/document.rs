@@ -108,6 +108,12 @@ pub struct Focus {
     #[serde(default)]
     pub periods: Option<Vec<Period>>,
 }
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UnlockedAchievement {
+    pub id: String,
+    pub unlocked_at: u64,
+}
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Document {
     pub version: u8,
@@ -115,6 +121,8 @@ pub struct Document {
     pub nodes: Vec<Node>,
     pub sessions: Vec<Session>,
     pub focus: Option<Focus>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub achievements: Option<Vec<UnlockedAchievement>>,
 }
 
 pub fn color(value: &str) -> Result<u32, String> {
@@ -250,6 +258,26 @@ impl Document {
             }
             check_periods(focus.periods.as_deref().unwrap_or_default())?;
         }
+        if let Some(achievements) = &self.achievements {
+            if achievements.len() > 10_000 {
+                return Err("Too many unlocked achievement records.".into());
+            }
+            for (i, item) in achievements.iter().enumerate() {
+                if item.id.is_empty()
+                    || item.id.len() > 64
+                    || !item
+                        .id
+                        .bytes()
+                        .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'_' | b':' | b'-'))
+                {
+                    return Err("Invalid achievement identifier.".into());
+                }
+                safe_number(item.unlocked_at)?;
+                if achievements[..i].iter().any(|prev| prev.id == item.id) {
+                    return Err("Duplicate unlocked achievement identifier.".into());
+                }
+            }
+        }
         let mut nodes = Vec::new();
         for node in &self.nodes {
             if !node.x.is_finite() || !node.y.is_finite() {
@@ -275,6 +303,7 @@ impl Document {
                     .unwrap_or_default(),
                 multiple_colors: node.multiple_colors,
                 allows_isolation: node.vertex.allows_isolation(),
+                habit: node.vertex.to_domain_habit()?,
             });
             if node.estimate_minutes < 0.0 {
                 return Err("The estimate must be nonnegative.".into());
@@ -381,7 +410,13 @@ impl Document {
                 estimate_minutes: node.estimate_ms as f64 / 60000.0,
                 notes: old.map(|old| old.notes.clone()).unwrap_or_default(),
                 notes_file: old.and_then(|old| old.notes_file.clone()),
-                vertex: old.map(|old| old.vertex.clone()).unwrap_or_default(),
+                vertex: match &node.habit {
+                    Some(habit) => crate::vertex::habit_from_domain(
+                        habit,
+                        old.and_then(|old| old.vertex.habit_unit()),
+                    ),
+                    None => old.map(|old| old.vertex.clone()).unwrap_or_default(),
+                },
                 size: old.and_then(|old| old.size.clone()),
                 finished_at: node.finished_at,
                 linked_tree_id: node.linked_tree_id.as_deref().map(text).transpose()?,
@@ -438,6 +473,7 @@ impl Document {
             nodes,
             sessions,
             focus,
+            achievements: self.achievements.clone(),
         })
     }
 }

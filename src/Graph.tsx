@@ -556,6 +556,7 @@ export const Graph = memo(function Graph({
               <GraphVertex
                 key={node.id}
                 node={node}
+                habitState={node.vertex?.kind === "habit" ? state : undefined}
                 geometry={vertexGeometry(node, nodes)}
                 dropTarget={dropBucketId === node.id}
                 treeId={treeId}
@@ -607,6 +608,7 @@ export const Graph = memo(function Graph({
               <GraphVertex
                 key={node.id}
                 node={node}
+                habitState={node.vertex?.kind === "habit" ? state : undefined}
                 geometry={vertexGeometry(node, nodes)}
                 dropTarget={dropBucketId === node.id}
                 treeId={treeId}

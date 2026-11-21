@@ -15,9 +15,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4e7648175b45a9a48536d676f68d918270699102aa8dab5496df06904c914600"
 
 [[package]]
-name = "hyperforest-bridge"
-version = "1.3.0"
+name = "hyperforest-achievements"
+version = "2.0.0"
 dependencies = [
+ "hyperforest-domain",
+]
+
+[[package]]
+name = "hyperforest-bridge"
+version = "2.0.0"
+dependencies = [
+ "hyperforest-achievements",
  "hyperforest-domain",
  "serde",
  "serde_json",
@@ -26,7 +34,7 @@ dependencies = [
 
 [[package]]
 name = "hyperforest-domain"
-version = "1.3.0"
+version = "2.0.0"
 
 [[package]]
 name = "itoa"

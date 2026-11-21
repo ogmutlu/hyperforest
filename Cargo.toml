@@ -1,10 +1,10 @@
 [workspace]
-members = ["crates/domain", "crates/bridge"]
+members = ["crates/domain", "crates/achievements", "crates/bridge"]
 exclude = ["src-tauri"]
 resolver = "2"
 
 [workspace.package]
-version = "1.3.0"
+version = "2.0.0"
 edition = "2021"
 license = "MIT"
 

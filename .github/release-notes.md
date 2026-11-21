@@ -1,30 +1,17 @@
-Hyperforest v1.3.0 for Linux x86-64.
+Hyperforest v2.0.0 for Linux x86-64.
 
-- Group vertices in buckets: drop them in, move the bucket with its contents, or drag a vertex out. The inspector lists each bucket's contents.
-- Capture thoughts as rounded cards that snap together. Resize thoughts and buckets in edit mode; double-click a thought to open its full text.
-- Keep standalone thoughts and buckets in pedantic graphs without weakening connectivity checks for ordinary goals.
-- Restore each tree's last pan and zoom across tab switches and restarts. Use **Show all** to fit the graph into view.
-- Collapse the inspector with **Hide vertex panel**. Right-click vertices for relevant actions and notes. A panel opened temporarily from a context menu closes on an empty graph click; an already open panel stays open.
-- Record habit repetitions from the context menu or compact horizontal controls. Edit history as daily counts, with paginated recorded days for large histories.
-- Change deadlines from either the inspector or the context menu. Reading progress now uses a slim color-matched bar with a percentage label.
-- Distinguish finishing a subgoal from leaving edit mode with a dedicated flag icon.
+- **Valued Habits (pure Rust domain):** Track habits by repetitions, numeric values (pages, km, minutes — with optional units, lower `≥` or upper `≤` bounds, and sum or per-entry evaluation), or time of day (`00:00–23:59`, e.g. wake-up time `≤ 07:30`). Unrecorded periods stay unrecorded rather than falsely met.
+- **Custom Weekday Habit Schedules:** Schedule habits on specific days of the week (e.g. every Tuesday and Friday) with rest days clearly distinguished in progress and monthly history.
+- **Steam-Style Achievements & Trophy Hall:** Full-screen Trophy Hall with permanent core achievements, secret CS & linguistics achievements (hidden until unlocked), resetting **Today's Wins** (up to 7 hours), open-ended **Endless Milestones** (+5h focus forever, repeatable high-focus combos, Green & Deep workweeks), and compact Core & Daily progress bars in the top bar.
+- **Satisfying Popups & Desktop Notifications:** Tiered confetti bursts, Steam-inspired synthesized chimes with combo pitch scaling, persistent toasts until dismissed, and native Linux desktop notifications with the Hyperforest icon.
+- **Monthly Focus Calendar:** Big Monday-first monthly calendar inside Session History showing daily focused hours (1 decimal place) with a color-coded performance scale.
 
-Existing version-1 workspaces remain supported. Bucket membership and resized vertex dimensions are included in saved workspaces and backups; graph view preferences are remembered on each device.
-
-To connect an updated hiper checkout, open its **Settings (F7)** and select the
-Hyperforest data folder containing `workspace.yaml`, or run:
-
-```sh
-hiper set --hyperfokus-dir "/path/to/hyperforest/data"
-```
-
-Hyperforest imports saved sessions within 30 seconds while open, or when the
-workspace next opens. Quit Hyperforest before upgrading and restart it afterward.
+Existing version-1 workspaces remain fully supported and automatically backfill historical achievements on first load.
 
 Download the `.deb` and install it on Ubuntu 22.04+ or Debian 12+:
 
 ```sh
-sudo apt install ./hyperforest_1.3.0_amd64.deb
+sudo apt install ./hyperforest_2.0.0_amd64.deb
 ```
 
 Verify the downloaded package with `sha256sum --check SHA256SUMS`.

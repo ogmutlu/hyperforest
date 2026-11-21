@@ -23,6 +23,63 @@ async fn desktop_show_window(app: tauri::AppHandle) {
 async fn desktop_quit(app: tauri::AppHandle) {
     app.exit(0);
 }
+const NOTIFICATION_ICON_PNG: &[u8] = include_bytes!("../icons/128x128.png");
+
+fn resolve_notification_icon(app: &tauri::AppHandle) -> String {
+    if let Ok(cache_dir) = app.path().app_cache_dir() {
+        let icon_path = cache_dir.join("notification-icon.png");
+        if icon_path.exists()
+            || (std::fs::create_dir_all(&cache_dir).is_ok()
+                && std::fs::write(&icon_path, NOTIFICATION_ICON_PNG).is_ok())
+        {
+            return icon_path.to_string_lossy().into_owned();
+        }
+    }
+    let system_icon = Path::new("/usr/share/icons/hicolor/128x128/apps/hyperforest.png");
+    if system_icon.exists() {
+        return system_icon.to_string_lossy().into_owned();
+    }
+    "hyperforest".into()
+}
+
+#[tauri::command]
+async fn desktop_notify(app: tauri::AppHandle, title: String, body: String) {
+    let title: String = title.chars().take(160).collect();
+    let body: String = body.chars().take(320).collect();
+    let icon = resolve_notification_icon(&app);
+    std::thread::spawn(move || {
+        let sent = std::process::Command::new("notify-send")
+            .args(["-a", "hyperforest", "-i", &icon, "--", &title, &body])
+            .status()
+            .is_ok_and(|status| status.success());
+        if !sent {
+            // Fallback to Freedesktop Notifications over D-Bus via gdbus (ships with GLib/GTK).
+            let escaped_icon = icon.replace('\\', "\\\\").replace('\'', "\\'");
+            let hints =
+                format!("{{'image-path': <'{escaped_icon}'>, 'desktop-entry': <'hyperforest'>}}");
+            let _ = std::process::Command::new("gdbus")
+                .args([
+                    "call",
+                    "--session",
+                    "--dest",
+                    "org.freedesktop.Notifications",
+                    "--object-path",
+                    "/org/freedesktop/Notifications",
+                    "--method",
+                    "org.freedesktop.Notifications.Notify",
+                    "hyperforest",
+                    "0",
+                    &icon,
+                    &title,
+                    &body,
+                    "[]",
+                    &hints,
+                    "5000",
+                ])
+                .status();
+        }
+    });
+}
 struct Desktop {
     store: Mutex<Option<Store>>,
     config: PathBuf,
@@ -312,6 +369,7 @@ fn main() {
             desktop_tray_state,
             desktop_show_window,
             desktop_quit,
+            desktop_notify,
             desktop_load,
             desktop_select,
             desktop_save,
@@ -331,6 +389,7 @@ fn main() {
         desktop_tray_state,
         desktop_show_window,
         desktop_quit,
+        desktop_notify,
         desktop_load,
         desktop_select,
         desktop_save,

@@ -2,13 +2,20 @@ import { useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { DeadlineTimer, HabitProgress } from "./Clock";
 import { desktopEnabled } from "./desktop";
-import type { Action, GoalNode } from "./model";
+import type { Action, GoalNode, State } from "./model";
 import { Icon } from "./icons";
-import { isWebsite } from "./vertices";
+import {
+  currentLocalTimeMinutes,
+  formatHabitLifetimeText,
+  formatHabitTime,
+  isWebsite,
+  parseHabitTime,
+} from "./vertices";
 import { HabitHistory } from "./HabitHistory";
 import { ReadingProgress } from "./ReadingProgress";
 
 export function VertexDetails({
+  state,
   node,
   busy,
   editing,
@@ -16,6 +23,7 @@ export function VertexDetails({
   changeHistory,
   run,
 }: {
+  state: State;
   node: GoalNode;
   busy: boolean;
   editing: boolean;
@@ -24,6 +32,12 @@ export function VertexDetails({
   run: (action: Action) => Promise<boolean>;
 }) {
   const [error, setError] = useState("");
+  const [habitInput, setHabitInput] = useState(() =>
+    node.vertex?.kind === "habit" &&
+    node.vertex.measure?.valueKind === "timeOfDay"
+      ? formatHabitTime(currentLocalTimeMinutes(Date.now()))
+      : "",
+  );
   const vertex = node.vertex;
   if (!vertex || vertex.kind === "vanilla") return null;
   const finished = node.finishedAt !== undefined;
@@ -105,35 +119,117 @@ export function VertexDetails({
       {vertex.kind === "habit" && (
         <>
           <span className="habit-progress" aria-label="Habit progress">
-            <HabitProgress vertex={vertex} />
+            <HabitProgress vertex={vertex} state={state} nodeId={node.id} />
           </span>
           <span className="vertex-detail-muted">
-            {vertex.completions.length} total
+            {formatHabitLifetimeText(vertex)}
           </span>
           <div
             className="habit-actions"
             role="group"
             aria-label="Habit actions"
           >
-            <button
-              className="icon-button hover-label-button"
-              aria-label="Record repetition"
-              title="Record repetition"
-              disabled={busy || finished}
-              onClick={() => {
-                void run({ type: "recordHabit", id: node.id });
-              }}
-            >
-              <Icon name="plus" size={16} />
-              <span className="hover-label" aria-hidden="true">
-                Record repetition
-              </span>
-            </button>
+            {vertex.measure ? (
+              <form
+                className="habit-value-log"
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  const m = vertex.measure!;
+                  const parsed =
+                    m.valueKind === "timeOfDay"
+                      ? parseHabitTime(habitInput)
+                      : habitInput.trim() === ""
+                        ? null
+                        : Number(habitInput);
+                  if (
+                    parsed === null ||
+                    !Number.isFinite(parsed) ||
+                    parsed < 0
+                  ) {
+                    setError(
+                      m.valueKind === "timeOfDay"
+                        ? "Enter a valid time (HH:MM)."
+                        : "Enter a nonnegative number.",
+                    );
+                    return;
+                  }
+                  setError("");
+                  void run({
+                    type: "recordHabit",
+                    id: node.id,
+                    value: parsed,
+                  }).then((ok) => {
+                    if (ok && m.valueKind === "number") setHabitInput("");
+                  });
+                }}
+              >
+                {vertex.measure.valueKind === "timeOfDay" ? (
+                  <input
+                    type="time"
+                    className="habit-value-input"
+                    aria-label="Habit time value"
+                    disabled={busy || finished}
+                    value={habitInput}
+                    onChange={(event) => setHabitInput(event.target.value)}
+                    required
+                  />
+                ) : (
+                  <input
+                    type="number"
+                    className="habit-value-input"
+                    aria-label="Habit value"
+                    min={0}
+                    max={1000000000}
+                    step="any"
+                    placeholder={vertex.measure.unit || "Value"}
+                    disabled={busy || finished}
+                    value={habitInput}
+                    onChange={(event) => setHabitInput(event.target.value)}
+                    required
+                  />
+                )}
+                <button
+                  type="submit"
+                  className="icon-button hover-label-button"
+                  aria-label="Record value"
+                  title="Record value"
+                  disabled={busy || finished}
+                >
+                  <Icon name="plus" size={16} />
+                  <span className="hover-label" aria-hidden="true">
+                    Record value
+                  </span>
+                </button>
+              </form>
+            ) : (
+              <button
+                className="icon-button hover-label-button"
+                aria-label="Record repetition"
+                title="Record repetition"
+                disabled={busy || finished}
+                onClick={() => {
+                  void run({ type: "recordHabit", id: node.id });
+                }}
+              >
+                <Icon name="plus" size={16} />
+                <span className="hover-label" aria-hidden="true">
+                  Record repetition
+                </span>
+              </button>
+            )}
             <button
               className="icon-button"
               aria-label="Undo last repetition"
-              title="Undo last repetition"
-              disabled={busy || finished || !vertex.completions.length}
+              title={
+                vertex.measure ? "Undo last entry" : "Undo last repetition"
+              }
+              disabled={
+                busy ||
+                finished ||
+                (vertex.measure
+                  ? !(vertex.entries?.length ?? 0)
+                  : !vertex.completions.length)
+              }
               onClick={() => {
                 void run({ type: "recordHabit", id: node.id, undo: true });
               }}
@@ -141,7 +237,9 @@ export function VertexDetails({
               <Icon name="undo" size={16} />
             </button>
             <HabitHistory
-              completions={vertex.completions}
+              state={state}
+              nodeId={node.id}
+              vertex={vertex}
               {...(!finished ? { changeHistory } : {})}
             />
             <button

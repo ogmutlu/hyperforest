@@ -2,7 +2,7 @@ import { noteNames, readWorkspace, workspaceFiles } from "./workspaceFiles";
 import { invoke, isTauri } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
 import { z } from "zod";
-import { apply, validateState } from "./domainClient";
+import { apply, syncAchievements, validateState } from "./domainClient";
 import type { Action, State } from "./model";
 import { structureYaml, simpleYaml } from "./export";
 import { STORAGE_KEY, Workspace } from "./storage";
@@ -102,11 +102,13 @@ export class DesktopWorkspace extends Workspace {
     this.syncError = errors.length
       ? `hiper sessions pending: ${errors.join("; ")}`
       : null;
+    const now = Date.now();
+    state = syncAchievements(state, now, state.achievements === undefined);
     const loaded = loadedSchema.parse(
       await invoke("desktop_save", {
         directory: this.directory,
         request: {
-          ...diskPayload(state, Date.now()),
+          ...diskPayload(state, now),
           imported_sessions: imported,
         },
       }),
@@ -120,13 +122,18 @@ export class DesktopWorkspace extends Workspace {
   }
   override commit(action: Action, now: number): Promise<void> {
     return this.enqueue(() =>
-      this.persist(apply(this.getSnapshot(), action, now)),
+      this.persist(
+        syncAchievements(apply(this.getSnapshot(), action, now), now, false),
+      ),
     );
   }
   override replace(raw: string): Promise<void> {
-    return this.enqueue(() =>
-      this.persist(validateState(JSON.parse(raw) as unknown)),
-    );
+    return this.enqueue(() => {
+      let next = validateState(JSON.parse(raw) as unknown);
+      if (next.achievements === undefined)
+        next = syncAchievements(next, Date.now(), true);
+      return this.persist(next);
+    });
   }
   override clear(): Promise<void> {
     return this.replace(
@@ -136,6 +143,7 @@ export class DesktopWorkspace extends Workspace {
         nodes: [],
         sessions: [],
         focus: null,
+        achievements: [],
       }),
     );
   }

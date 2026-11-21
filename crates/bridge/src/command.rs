@@ -43,13 +43,19 @@ pub enum Action {
     },
     SetHabitHistory {
         id: String,
+        #[serde(default)]
         completions: Vec<u64>,
         expected: Option<Vec<u64>>,
+        #[serde(default)]
+        entries: Vec<crate::vertex::HabitEntry>,
+        expected_entries: Option<Vec<crate::vertex::HabitEntry>>,
     },
     RecordHabit {
         id: String,
         #[serde(default)]
         undo: bool,
+        #[serde(default)]
+        value: Option<f64>,
     },
     Isolate {
         id: String,
@@ -169,6 +175,7 @@ pub fn apply(
 ) -> Result<Document, String> {
     let mut notes = None;
     let mut added_vertex = None;
+    let mut habit_unit_update: Option<(String, Option<String>)> = None;
     let command = match action {
         Action::ResizeVertex {
             id,
@@ -188,59 +195,187 @@ pub fn apply(
             document.nodes[index].y = y;
             return Ok(document);
         }
-        Action::ConfigureVertex { id, vertex } => {
-            let index = editable(&document, &id)?;
-            // The full thought is presentation metadata; its domain title stays short.
-            if let crate::vertex::Vertex::Thought { text: Some(text) } = &vertex {
-                document.nodes[index].title = text
-                    .split_whitespace()
-                    .take(6)
-                    .collect::<Vec<_>>()
-                    .join(" ")
-                    .chars()
-                    .take(80)
-                    .collect();
+        Action::ConfigureVertex {
+            id: identity,
+            vertex,
+        } => {
+            let index = editable(&document, &identity)?;
+            if core::mem::discriminant(&document.nodes[index].vertex)
+                != core::mem::discriminant(&vertex)
+            {
+                return Err("A vertex's kind cannot be changed.".into());
             }
-            document.nodes[index].vertex = document.nodes[index].vertex.configure(vertex)?;
-            return Ok(document);
+            if let crate::vertex::Vertex::Habit {
+                frequency,
+                interval,
+                weekdays,
+                measure,
+                ..
+            } = vertex
+            {
+                let weekdays_mask = crate::vertex::weekdays_to_mask(&weekdays);
+                if interval == crate::vertex::HabitInterval::Custom {
+                    if weekdays_mask == 0 {
+                        return Err(
+                            "Choose at least one day of the week for a custom habit.".into()
+                        );
+                    }
+                } else if !weekdays.is_empty() {
+                    return Err(
+                        "Specific weekdays are only used with custom habit intervals.".into(),
+                    );
+                }
+                let unit = match &measure {
+                    Some(m) => crate::vertex::normalize_unit(m.value_kind, m.unit.as_deref())?,
+                    None => None,
+                };
+                let domain_measure = measure
+                    .as_ref()
+                    .map(crate::vertex::measure_to_domain)
+                    .transpose()?;
+                habit_unit_update = Some((identity.clone(), unit));
+                d::Command::ConfigureHabit {
+                    id: id(identity),
+                    frequency,
+                    interval: crate::vertex::interval_to_domain(interval),
+                    weekdays: weekdays_mask,
+                    measure: domain_measure,
+                }
+            } else {
+                // The full thought is presentation metadata; its domain title stays short.
+                if let crate::vertex::Vertex::Thought { text: Some(text) } = &vertex {
+                    document.nodes[index].title = text
+                        .split_whitespace()
+                        .take(6)
+                        .collect::<Vec<_>>()
+                        .join(" ")
+                        .chars()
+                        .take(80)
+                        .collect();
+                }
+                document.nodes[index].vertex = document.nodes[index].vertex.configure(vertex)?;
+                return Ok(document);
+            }
         }
         Action::SetHabitHistory {
-            id,
+            id: identity,
             completions,
             expected,
+            entries,
+            expected_entries,
         } => {
-            let index = editable(&document, &id)?;
-            if completions.len() > 100000 || completions.iter().any(|at| *at > now) {
-                return Err(
-                    "Habit history must contain at most 100000 repetitions, no later than now."
-                        .into(),
-                );
-            }
+            let index = editable(&document, &identity)?;
             let crate::vertex::Vertex::Habit {
                 completions: records,
+                measure,
+                entries: current_entries,
                 ..
-            } = &mut document.nodes[index].vertex
+            } = &document.nodes[index].vertex
             else {
                 return Err("Only habits have repetition history.".into());
             };
-            if expected
-                .as_ref()
-                .is_some_and(|expected| expected != records)
-            {
-                return Err(
-                    "Habit history changed in another tab. Reopen it before saving.".into(),
-                );
+            match measure {
+                None => {
+                    if !entries.is_empty()
+                        || completions.len() > d::MAX_HABIT_RECORDS
+                        || completions.iter().any(|at| *at > now)
+                    {
+                        return Err(
+                            "Habit history must contain at most 100000 repetitions, no later than now."
+                                .into(),
+                        );
+                    }
+                    if expected
+                        .as_ref()
+                        .is_some_and(|expected| expected != records)
+                    {
+                        return Err(
+                            "Habit history changed in another tab. Reopen it before saving.".into(),
+                        );
+                    }
+                    d::Command::SetHabitHistory {
+                        id: id(identity),
+                        completions,
+                        entries: vec![],
+                    }
+                }
+                Some(m) => {
+                    if !completions.is_empty()
+                        || entries.len() > d::MAX_HABIT_RECORDS
+                        || entries.iter().any(|entry| entry.at > now)
+                    {
+                        return Err(
+                            "Habit history must contain at most 100000 entries, no later than now."
+                                .into(),
+                        );
+                    }
+                    if expected_entries
+                        .as_ref()
+                        .is_some_and(|expected| expected != current_entries)
+                    {
+                        return Err(
+                            "Habit history changed in another tab. Reopen it before saving.".into(),
+                        );
+                    }
+                    let mut domain_entries = Vec::with_capacity(entries.len());
+                    for entry in entries {
+                        crate::document::safe_number(entry.at)?;
+                        domain_entries.push(d::HabitEntry {
+                            at: entry.at,
+                            value: crate::vertex::value_to_domain(m.value_kind, entry.value)?,
+                        });
+                    }
+                    d::Command::SetHabitHistory {
+                        id: id(identity),
+                        completions: vec![],
+                        entries: domain_entries,
+                    }
+                }
             }
-            let mut completions = completions;
-            completions.sort_unstable();
-            *records = completions;
-            document.nodes[index].vertex.validate()?;
-            return Ok(document);
         }
-        Action::RecordHabit { id, undo } => {
-            let index = editable(&document, &id)?;
-            document.nodes[index].vertex.record(now, undo)?;
-            return Ok(document);
+        Action::RecordHabit {
+            id: identity,
+            undo,
+            value,
+        } => {
+            let index = editable(&document, &identity)?;
+            let crate::vertex::Vertex::Habit {
+                completions,
+                measure,
+                entries,
+                ..
+            } = &document.nodes[index].vertex
+            else {
+                return Err("Only habits have a repetition counter or value history.".into());
+            };
+            if !undo {
+                let last_at = match measure {
+                    None => completions.last().copied(),
+                    Some(_) => entries.last().map(|entry| entry.at),
+                };
+                if last_at.is_some_and(|last| last > now) {
+                    return Err("The clock is earlier than the last habit record.".into());
+                }
+            }
+            let domain_value = if undo {
+                None
+            } else {
+                match (measure, value) {
+                    (None, None) => None,
+                    (None, Some(_)) => {
+                        return Err("Repetition habits do not take a numeric value.".into());
+                    }
+                    (Some(_), None) => {
+                        return Err("Enter a value to record for this habit.".into());
+                    }
+                    (Some(m), Some(v)) => Some(crate::vertex::value_to_domain(m.value_kind, v)?),
+                }
+            };
+            d::Command::RecordHabit {
+                id: id(identity),
+                undo,
+                value: domain_value,
+            }
         }
         Action::Move {
             id,
@@ -309,6 +444,7 @@ pub fn apply(
         } => {
             vertex.validate_new()?;
             let allows_isolation = vertex.allows_isolation();
+            let habit = vertex.to_domain_habit()?;
             added_vertex = Some((identity.clone(), parent_id.clone(), vertex));
             let parent = &document.nodes[find_node(&document, &parent_id)?];
             d::Command::Add {
@@ -318,6 +454,7 @@ pub fn apply(
                 title: title(name),
                 linked_tree_id: linked_tree_id.map(id),
                 allows_isolation,
+                habit,
             }
         }
         Action::Isolate {
@@ -329,6 +466,7 @@ pub fn apply(
         } => {
             vertex.validate_new()?;
             let allows_isolation = vertex.allows_isolation();
+            let habit = vertex.to_domain_habit()?;
             added_vertex = Some((identity.clone(), tree_id.clone(), vertex));
             d::Command::Add {
                 id: id(identity),
@@ -337,6 +475,7 @@ pub fn apply(
                 title: title(name),
                 linked_tree_id: linked_tree_id.map(id),
                 allows_isolation,
+                habit,
             }
         }
         Action::Edit {
@@ -475,9 +614,27 @@ pub fn apply(
             document = crate::layout::arrange(document, &tree_id)?;
         }
     }
+    if let Some((id, unit)) = habit_unit_update {
+        let index = find_node(&document, &id)?;
+        if let crate::vertex::Vertex::Habit {
+            measure: Some(ref mut m),
+            ..
+        } = document.nodes[index].vertex
+        {
+            m.unit = unit;
+        }
+    }
     if let Some((id, parent_id, vertex)) = added_vertex {
         let index = find_node(&document, &id)?;
-        document.nodes[index].vertex = vertex;
+        if !matches!(vertex, crate::vertex::Vertex::Habit { .. }) {
+            document.nodes[index].vertex = vertex;
+        } else if let crate::vertex::Vertex::Habit {
+            measure: Some(ref mut m),
+            ..
+        } = document.nodes[index].vertex
+        {
+            m.unit = vertex.habit_unit();
+        }
         document = crate::vertex::place_new(document, &id, &parent_id)?;
     }
     Ok(document)

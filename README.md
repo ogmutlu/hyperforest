@@ -17,7 +17,7 @@ candidate theorems.
 ## Start
 
 Linux x86-64 desktop packages are available from [GitHub Releases](https://github.com/ogmutlu/hyperforest/releases).
-Download the `.deb` and install it with `sudo apt install ./hyperforest_1.3.0_amd64.deb`.
+Download the `.deb` and install it with `sudo apt install ./hyperforest_2.0.0_amd64.deb`.
 
 Requires Node 24+, npm, Rust/Cargo, and these one-time tools:
 
@@ -75,9 +75,18 @@ membership across reloads and backups, and do not change tree connections. Stand
 thoughts and buckets are allowed in pedantic mode. Root vertices and other buckets
 cannot be placed inside a bucket.
 
-Record and undo habit repetitions from the selected vertex's counter. **History**
-next to it opens a monthly calendar with recorded days in green. Weeks start on
+Record and undo habit repetitions or valued entries (numeric thresholds/caps such
+as pages read `≥ 30` or clock-time bounds such as wake-up time `≤ 07:30`) from
+the selected vertex's counter. **History** next to it opens a monthly calendar
+with completed days in green and missed valued days in amber. Weeks start on
 Monday; progress uses the local calendar, and history remains saved across periods.
+
+The trophy icon beside **Session history** opens the full-screen **Achievements**
+Trophy Hall, featuring resetting **Today’s Early Wins**, core achievements,
+open-ended milestone series (every +5 hours focused, +10 sessions, +5 Pomodoros,
+and more), and hidden Easter eggs. Permanent unlocks are saved in
+`workspace.yaml` (retroactively backfilled for existing workspaces with a single
+summary toast) and announced with bottom-right popups and tiered synthesized chimes.
 
 Creation turns on Edit graph and places only the new vertex; existing positions
 stay unchanged. Use **Fit graph** to see vertices beyond the current view, or

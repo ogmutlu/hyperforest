@@ -1,6 +1,6 @@
 import { memo } from "react";
 import type { PointerEvent as ReactPointerEvent } from "react";
-import type { GoalNode } from "./model";
+import type { GoalNode, State } from "./model";
 import { assignedNodeColors, shortTime } from "./presentation";
 import { Icon } from "./icons";
 import { DeadlineTimer, HabitProgress } from "./Clock";
@@ -8,6 +8,7 @@ import { thoughtLines, thoughtPreview } from "./vertices";
 
 interface Props {
   node: GoalNode;
+  habitState?: State | undefined;
   geometry: { rx: number; ry: number };
   dropTarget: boolean;
   treeId: string;
@@ -26,6 +27,7 @@ interface Props {
 }
 export const GraphVertex = memo(function GraphVertex({
   node,
+  habitState,
   geometry,
   dropTarget,
   treeId,
@@ -315,7 +317,11 @@ export const GraphVertex = memo(function GraphVertex({
         )}
         {node.vertex?.kind === "habit" && (
           <text y={radius + 60} textAnchor="middle" className="node-habit">
-            <HabitProgress vertex={node.vertex} />
+            <HabitProgress
+              vertex={node.vertex}
+              {...(habitState ? { state: habitState } : {})}
+              nodeId={node.id}
+            />
           </text>
         )}
       </g>

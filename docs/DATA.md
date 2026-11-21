@@ -70,15 +70,49 @@ vertex:
   frequency: 3
   interval: week
   completions: [1792108800000]
+vertex:
+  kind: habit
+  frequency: 1
+  interval: day
+  measure:
+    valueKind: number
+    bound: atLeast
+    target: 30
+    unit: pages
+    aggregate: sum
+  entries:
+    - at: 1792108800000
+      value: 35
+vertex:
+  kind: habit
+  frequency: 1
+  interval: day
+  measure:
+    valueKind: timeOfDay
+    bound: atMost
+    target: 450
+    aggregate: perEntry
+  entries:
+    - at: 1792108800000
+      value: 435
 ```
 
 Deadline and repetition timestamps are integer Unix milliseconds. Reading
 resources are optional file paths or HTTP(S) addresses; attached files are not
 copied into backups. Relative file paths resolve against the desktop workspace
 directory, and `~/` resolves against the user's home. Habit intervals are `day`,
-`week`, or `month`, with a frequency of 1 to 1000 repetitions. Progress uses the
-current local calendar; weeks begin on Monday. The ordered `completions` history
-supplies the period and lifetime counters and survives frequency edits.
+`week`, `month`, or `custom` (with `weekdays: [tue, fri]` using `mon`–`sun`), with a frequency of 1 to 1000 repetitions. Progress uses the
+current local calendar; weeks begin on Monday. Repetition habits store ordered
+`completions` timestamps; valued habits store a `measure` (nonnegative `number`
+with optional `unit` and `sum`/`perEntry` aggregation, or `timeOfDay` in minutes
+since midnight `0..1439` with `atLeast` `≥` or `atMost` `≤` bounds) and ordered
+`entries: [{ at, value }]`. Unrecorded periods are never treated as met, even
+for upper-bound (`atMost`) habits. History survives target and frequency edits.
+
+An optional top-level `achievements` list records permanently unlocked
+achievements (`{ id, unlockedAt }`), including core achievements and open-ended
+milestone series (e.g., `endless:focus_hours:5`). Legacy workspaces without an
+`achievements` field are retroactively backfilled on load.
 
 All kinds use the same graph, note, focus, color, and completion fields. Creating
 a vertex assigns just its new coordinates and preserves every existing position.

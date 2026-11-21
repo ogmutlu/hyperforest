@@ -5,9 +5,70 @@ pub type Id = Vec<u8>;
 pub type Text = Vec<u8>;
 pub type Color = u32;
 pub const MAX_NODES: usize = 2000;
+pub const HABIT_VALUE_SCALE: u64 = 1000;
+pub const MAX_HABIT_NUMBER: u64 = 1_000_000_000 * HABIT_VALUE_SCALE;
+pub const MAX_HABIT_TIME_OF_DAY: u64 = 1439;
+pub const MAX_HABIT_RECORDS: usize = 100_000;
 pub const DEFAULT_COLORS: [Color; 8] = [
     0xdfc491, 0x80c9bc, 0x9ca8dc, 0xb7c894, 0xcb99bc, 0x86b7db, 0xdd9689, 0xa5cfb4,
 ];
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum HabitInterval {
+    Day,
+    Week,
+    Month,
+    Custom,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum HabitValueKind {
+    /// Fixed-point nonnegative value scaled by `HABIT_VALUE_SCALE` (up to 3 decimals).
+    Number,
+    /// Clock time of day as integer minutes since midnight (`0..=1439`).
+    TimeOfDay,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum HabitBound {
+    /// Completed when value >= target (e.g., pages read).
+    AtLeast,
+    /// Completed when value <= target (e.g., wake-up time, daily cap).
+    AtMost,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum HabitAggregate {
+    /// Sum logged values in the period and compare against target (`Number` only).
+    Sum,
+    /// Check each logged entry against the bound; qualifying entries count toward `frequency`.
+    PerEntry,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct HabitMeasure {
+    pub value_kind: HabitValueKind,
+    pub bound: HabitBound,
+    pub target: u64,
+    pub aggregate: HabitAggregate,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct HabitEntry {
+    pub at: u64,
+    pub value: u64,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Habit {
+    pub frequency: u16,
+    pub interval: HabitInterval,
+    /// 7-bit weekday mask for `HabitInterval::Custom` (bit 0 = Mon .. bit 6 = Sun); 0 otherwise.
+    pub weekdays: u8,
+    pub completions: Vec<u64>,
+    pub measure: Option<HabitMeasure>,
+    pub entries: Vec<HabitEntry>,
+}
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Tree {
@@ -31,6 +92,8 @@ pub struct Node {
     pub multiple_colors: bool,
     /// Standalone annotations may sit outside the host tree.
     pub allows_isolation: bool,
+    /// Core habit configuration and timestamped history, when this vertex is a habit.
+    pub habit: Option<Habit>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -101,6 +164,24 @@ pub enum Command {
         title: Text,
         linked_tree_id: Option<Id>,
         allows_isolation: bool,
+        habit: Option<Habit>,
+    },
+    ConfigureHabit {
+        id: Id,
+        frequency: u16,
+        interval: HabitInterval,
+        weekdays: u8,
+        measure: Option<HabitMeasure>,
+    },
+    RecordHabit {
+        id: Id,
+        undo: bool,
+        value: Option<u64>,
+    },
+    SetHabitHistory {
+        id: Id,
+        completions: Vec<u64>,
+        entries: Vec<HabitEntry>,
     },
     Edit {
         id: Id,
@@ -188,6 +269,10 @@ pub enum Error {
     EnableMultipleColors,
     InvalidTime,
     InvalidSession,
+    NotHabit,
+    InvalidHabit,
+    HabitHistoryEmpty,
+    HabitKindMismatch,
     Overflow,
     Limit,
 }

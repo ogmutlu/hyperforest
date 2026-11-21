@@ -106,6 +106,9 @@ pub fn validate(state: &Snapshot) -> Result<(), Error> {
                 return Err(Error::Cycle);
             }
         }
+        if let Some(habit) = &node.habit {
+            crate::habit::validate_habit(habit)?;
+        }
         i += 1;
     }
     i = 0;

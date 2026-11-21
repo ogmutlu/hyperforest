@@ -1,5 +1,8 @@
 //! Executable examples of the future proof obligations. These are tests, not proofs.
-use hyperforest_domain::{graph, time, Command, Error, Period, State};
+use hyperforest_domain::{
+    graph, habit, time, Command, Error, Habit, HabitAggregate, HabitBound, HabitEntry,
+    HabitInterval, HabitMeasure, HabitValueKind, Period, State, HABIT_VALUE_SCALE,
+};
 
 fn id(value: &str) -> Vec<u8> {
     value.as_bytes().to_vec()
@@ -25,6 +28,7 @@ fn add(state: &State, name: &str, parent: &str) -> State {
                 title: id(name),
                 linked_tree_id: None,
                 allows_isolation: false,
+                habit: None,
             },
             1000,
         )
@@ -287,6 +291,7 @@ fn hiper_import_matches_titles_and_falls_back_to_a_reusable_hiper_tree() {
                 title: id("Logic"),
                 linked_tree_id: None,
                 allows_isolation: false,
+                habit: None,
             },
             9000,
         )
@@ -339,6 +344,7 @@ fn hiper_import_prefers_the_named_tree_over_links_and_existing_fallbacks() {
                 title: id("tez"),
                 linked_tree_id: Some(id("thesis")),
                 allows_isolation: false,
+                habit: None,
             },
             9000,
         )
@@ -399,6 +405,7 @@ fn hiper_import_resolves_multiple_matching_links_to_one_destination() {
                     title: id("alias"),
                     linked_tree_id: Some(id("target")),
                     allows_isolation: false,
+                    habit: None,
                 },
                 1000,
             )
@@ -474,5 +481,182 @@ fn imported_history_credits_new_and_existing_trees_without_changing_session_date
             .last()
             .unwrap(),
         0
+    );
+}
+
+#[test]
+fn valued_habits_enforce_lower_and_upper_bounds_and_never_complete_unrecorded_periods() {
+    let pages_measure = HabitMeasure {
+        value_kind: HabitValueKind::Number,
+        bound: HabitBound::AtLeast,
+        target: 30 * HABIT_VALUE_SCALE,
+        aggregate: HabitAggregate::Sum,
+    };
+    let wake_measure = HabitMeasure {
+        value_kind: HabitValueKind::TimeOfDay,
+        bound: HabitBound::AtMost,
+        target: 7 * 60 + 30, // 07:30
+        aggregate: HabitAggregate::PerEntry,
+    };
+    let state = tree()
+        .apply(
+            Command::Add {
+                id: id("pages"),
+                tree_id: id("root"),
+                parent_id: Some(id("root")),
+                title: id("Read pages"),
+                linked_tree_id: None,
+                allows_isolation: false,
+                habit: Some(Habit {
+                    frequency: 1,
+                    interval: HabitInterval::Day,
+                    weekdays: 0,
+                    completions: vec![],
+                    measure: Some(pages_measure),
+                    entries: vec![],
+                }),
+            },
+            1000,
+        )
+        .unwrap()
+        .apply(
+            Command::Add {
+                id: id("wake"),
+                tree_id: id("root"),
+                parent_id: Some(id("root")),
+                title: id("Wake early"),
+                linked_tree_id: None,
+                allows_isolation: false,
+                habit: Some(Habit {
+                    frequency: 1,
+                    interval: HabitInterval::Day,
+                    weekdays: 0,
+                    completions: vec![],
+                    measure: Some(wake_measure),
+                    entries: vec![],
+                }),
+            },
+            1000,
+        )
+        .unwrap();
+
+    // Unrecorded periods are Unrecorded (never Met), even for upper-bound habits.
+    let wake_habit = state.snapshot().nodes[2].habit.as_ref().unwrap();
+    let empty_status = habit::evaluate_period(wake_habit, 0, 10_000).unwrap();
+    assert_eq!(empty_status.state, habit::CompletionState::Unrecorded);
+
+    // Accumulate pages across two entries in day 1 (15 + 20 = 35 >= 30 -> Met).
+    let state = state
+        .apply(
+            Command::RecordHabit {
+                id: id("pages"),
+                undo: false,
+                value: Some(15 * HABIT_VALUE_SCALE),
+            },
+            2000,
+        )
+        .unwrap()
+        .apply(
+            Command::RecordHabit {
+                id: id("pages"),
+                undo: false,
+                value: Some(20 * HABIT_VALUE_SCALE),
+            },
+            3000,
+        )
+        .unwrap();
+    let pages_habit = state.snapshot().nodes[1].habit.as_ref().unwrap();
+    let day1 = habit::evaluate_period(pages_habit, 1000, 5000).unwrap();
+    assert_eq!(day1.state, habit::CompletionState::Met);
+    assert_eq!(day1.total_value, 35 * HABIT_VALUE_SCALE);
+
+    // Wake up: day 1 at 07:15 (Met), day 2 at 08:10 (Missed), day 3 at 07:30 (Met).
+    let state = state
+        .apply(
+            Command::SetHabitHistory {
+                id: id("wake"),
+                completions: vec![],
+                entries: vec![
+                    HabitEntry {
+                        at: 1500,
+                        value: 7 * 60 + 15,
+                    },
+                    HabitEntry {
+                        at: 2500,
+                        value: 8 * 60 + 10,
+                    },
+                    HabitEntry {
+                        at: 3500,
+                        value: 7 * 60 + 30,
+                    },
+                ],
+            },
+            4000,
+        )
+        .unwrap();
+    let wake_habit = state.snapshot().nodes[2].habit.as_ref().unwrap();
+    let statuses = habit::evaluate_periods(wake_habit, &[1000, 2000, 3000, 4000, 5000]).unwrap();
+    assert_eq!(
+        statuses.iter().map(|s| s.state).collect::<Vec<_>>(),
+        vec![
+            habit::CompletionState::Met,
+            habit::CompletionState::Missed,
+            habit::CompletionState::Met,
+            habit::CompletionState::Unrecorded,
+        ]
+    );
+    let summary = habit::summarize_streaks(&statuses);
+    assert_eq!(summary.met_count, 2);
+    assert_eq!(summary.best, 1);
+    assert_eq!(summary.current, 0);
+
+    // Reconfiguring target preserves history; incompatible kind switch is rejected.
+    let updated = state
+        .apply(
+            Command::ConfigureHabit {
+                id: id("wake"),
+                frequency: 1,
+                interval: HabitInterval::Custom,
+                weekdays: (1 << 1) | (1 << 4), // Tue & Fri
+                measure: Some(HabitMeasure {
+                    target: 7 * 60 + 20,
+                    ..wake_measure
+                }),
+            },
+            4500,
+        )
+        .unwrap();
+    assert_eq!(
+        updated.snapshot().nodes[2]
+            .habit
+            .as_ref()
+            .unwrap()
+            .entries
+            .len(),
+        3
+    );
+    assert_eq!(
+        updated.apply(
+            Command::ConfigureHabit {
+                id: id("wake"),
+                frequency: 1,
+                interval: HabitInterval::Day,
+                weekdays: 0,
+                measure: None,
+            },
+            4600,
+        ),
+        Err(Error::HabitKindMismatch)
+    );
+    assert_eq!(
+        updated.apply(
+            Command::RecordHabit {
+                id: id("wake"),
+                undo: false,
+                value: Some(1440),
+            },
+            4700,
+        ),
+        Err(Error::InvalidHabit)
     );
 }

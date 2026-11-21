@@ -1,5 +1,14 @@
 import { useEffect, useRef, useState } from "react";
+import { habitMonthDayBoundaries } from "./calendar";
+import { habitPeriods } from "./domainClient";
 import { Icon } from "./icons";
+import type { State, Vertex } from "./model";
+import {
+  formatHabitTarget,
+  formatHabitTime,
+  formatHabitValue,
+  isHabitScheduledOn,
+} from "./vertices";
 
 function positionCalendar(details: HTMLDetailsElement) {
   const calendar = details.querySelector<HTMLElement>(".habit-calendar");
@@ -18,10 +27,14 @@ function dayKey(date: Date): string {
 }
 
 export function HabitHistory({
-  completions,
+  state,
+  nodeId,
+  vertex,
   changeHistory,
 }: {
-  completions: number[];
+  state: State;
+  nodeId: string;
+  vertex: Extract<Vertex, { kind: "habit" }>;
   changeHistory?: () => void;
 }) {
   const [month, setMonth] = useState(() => {
@@ -49,11 +62,29 @@ export function HabitHistory({
       document.removeEventListener("keydown", escape, true);
     };
   }, []);
+
+  const measure = vertex.measure;
   const counts = new Map<string, number>();
-  for (const at of completions) {
-    const key = dayKey(new Date(at));
-    counts.set(key, (counts.get(key) ?? 0) + 1);
+  const dayValues = new Map<string, number[]>();
+  if (!measure) {
+    for (const at of vertex.completions) {
+      const key = dayKey(new Date(at));
+      counts.set(key, (counts.get(key) ?? 0) + 1);
+    }
+  } else {
+    for (const entry of vertex.entries ?? []) {
+      const key = dayKey(new Date(entry.at));
+      const list = dayValues.get(key) ?? [];
+      list.push(entry.value);
+      dayValues.set(key, list);
+    }
   }
+
+  const boundaries = habitMonthDayBoundaries(
+    month.getFullYear(),
+    month.getMonth(),
+  );
+  const statuses = measure ? habitPeriods(state, nodeId, boundaries) : [];
   const offset = (month.getDay() + 6) % 7;
   const days = new Date(month.getFullYear(), month.getMonth() + 1, 0).getDate();
   return (
@@ -123,12 +154,60 @@ export function HabitHistory({
               month.getMonth(),
               index + 1,
             );
-            const count = counts.get(dayKey(date)) ?? 0;
-            const label = `${date.toLocaleDateString(undefined, { year: "numeric", month: "long", day: "numeric" })}: ${count} repetition${count === 1 ? "" : "s"}`;
+            const dateText = date.toLocaleDateString(undefined, {
+              year: "numeric",
+              month: "long",
+              day: "numeric",
+            });
+            const scheduled = isHabitScheduledOn(vertex, date.getTime());
+            if (!measure) {
+              const count = counts.get(dayKey(date)) ?? 0;
+              const label = `${dateText}: ${count} repetition${count === 1 ? "" : "s"}${!scheduled ? " (rest day)" : ""}`;
+              return (
+                <span
+                  key={index}
+                  className={
+                    count
+                      ? "habit-day completed"
+                      : !scheduled
+                        ? "habit-day off-day"
+                        : "habit-day"
+                  }
+                  aria-label={label}
+                  title={label}
+                  tabIndex={0}
+                >
+                  {index + 1}
+                </span>
+              );
+            }
+            const status = statuses[index];
+            const values = dayValues.get(dayKey(date)) ?? [];
+            const stateClass =
+              status?.state === "met"
+                ? "habit-day completed"
+                : status?.state === "missed"
+                  ? "habit-day missed"
+                  : !scheduled
+                    ? "habit-day off-day"
+                    : "habit-day";
+            const summary =
+              values.length === 0
+                ? scheduled
+                  ? "not recorded"
+                  : "rest day"
+                : measure.valueKind === "timeOfDay"
+                  ? values.map(formatHabitTime).join(", ")
+                  : (measure.aggregate ?? "sum") === "sum"
+                    ? formatHabitValue(measure, status?.totalValue ?? 0)
+                    : values
+                        .map((v) => formatHabitValue(measure, v))
+                        .join(", ");
+            const label = `${dateText}: ${summary} (target ${formatHabitTarget(measure)})`;
             return (
               <span
                 key={index}
-                className={count ? "habit-day completed" : "habit-day"}
+                className={stateClass}
                 aria-label={label}
                 title={label}
                 tabIndex={0}
@@ -138,7 +217,11 @@ export function HabitHistory({
             );
           })}
         </div>
-        <p>Green days have recorded repetitions.</p>
+        <p>
+          {measure
+            ? `Green days met ${formatHabitTarget(measure)}; amber days missed it.`
+            : "Green days have recorded repetitions."}
+        </p>
         {changeHistory && (
           <button
             type="button"
