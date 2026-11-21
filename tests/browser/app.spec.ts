@@ -1852,7 +1852,7 @@ test("history handles a large ledger with Rust statistics, pagination, and isola
   await page.addInitScript(() => {
     const state = JSON.parse(localStorage.getItem("hyperforest.workspace.v1")!);
     state.sessions = Array.from({ length: 1205 }, (_, index) => {
-      const start = new Date(2026, 9, 1, 0, index).getTime();
+      const start = new Date(2026, 9, 1, 4, index).getTime();
       return {
         id: `ledger-${index}`,
         treeId: "project",
