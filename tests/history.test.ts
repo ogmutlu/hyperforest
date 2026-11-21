@@ -22,31 +22,33 @@ it("date entry rejects incomplete and nonexistent dates rather than normalizing 
   );
 });
 
-it("calendar boundaries follow 23-hour and 25-hour local days", () => {
+it("calendar boundaries follow 23-hour and 25-hour local days (04:00–04:00)", () => {
   vi.stubEnv("TZ", "Europe/Berlin");
+  // Spring forward occurs at 02:00 on 2026-03-29, which belongs to focus day 2026-03-28.
   const spring = historyDays(
     [],
-    "2026-03-28",
-    "2026-03-30",
-    new Date(2026, 9, 27).getTime(),
+    "2026-03-27",
+    "2026-03-29",
+    new Date(2026, 9, 27, 12).getTime(),
   );
   expect(spring.slice(1).map((end, i) => (end - spring[i]!) / 3600000)).toEqual(
     [24, 23, 24],
   );
+  // Fall back occurs at 03:00 on 2026-10-25, which belongs to focus day 2026-10-24.
   const autumn = historyDays(
     [],
-    "2026-10-24",
-    "2026-10-26",
-    new Date(2026, 9, 27).getTime(),
+    "2026-10-23",
+    "2026-10-25",
+    new Date(2026, 9, 27, 12).getTime(),
   );
   expect(autumn.slice(1).map((end, i) => (end - autumn[i]!) / 3600000)).toEqual(
     [24, 25, 24],
   );
 });
 
-it("the WASM history query clips midnight sessions, excludes pauses and active focus, and includes empty days", () => {
+it("the WASM history query clips 04:00-crossing sessions, excludes pauses and active focus, and includes empty days", () => {
   vi.stubEnv("TZ", "Europe/Berlin");
-  const at = (day: number, hour = 0, minute = 0): number =>
+  const at = (day: number, hour = 4, minute = 0): number =>
     new Date(2026, 9, day, hour, minute).getTime();
   let state: State = {
     version: 1,
@@ -60,10 +62,10 @@ it("the WASM history query clips midnight sessions, excludes pauses and active f
     { type: "create", id: "root", title: "Research" },
     at(1),
   );
-  state = apply(state, { type: "start", id: "root" }, at(6, 23, 45));
-  state = apply(state, { type: "pause" }, at(7, 0, 15));
-  state = apply(state, { type: "start", id: "root" }, at(7, 1));
-  state = apply(state, { type: "finish", id: "overnight" }, at(7, 1, 15));
+  state = apply(state, { type: "start", id: "root" }, at(7, 3, 45));
+  state = apply(state, { type: "pause" }, at(7, 4, 15));
+  state = apply(state, { type: "start", id: "root" }, at(7, 5));
+  state = apply(state, { type: "finish", id: "overnight" }, at(7, 5, 15));
   state = apply(
     state,
     {

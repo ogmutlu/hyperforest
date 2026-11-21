@@ -1,10 +1,18 @@
 import { describe, expect, it } from "vitest";
 import {
+  focusDay,
+  focusMonthDayBoundaries,
+  historyDays,
+  matchingSessionIndices,
+} from "../src/calendar";
+import {
   apply,
   evaluateAchievements,
   habitPeriod,
   habitPeriods,
+  historyStatistics,
   syncAchievements,
+  todayTime,
   validateState,
 } from "../src/domainClient";
 import { archiveBackup, exportArchive } from "../src/export";
@@ -302,5 +310,118 @@ describe("Steam-style achievements, open-ended +5h milestones, daily wins, and b
     );
     expect(ids.has("endless:focus_hours:5")).toBe(true);
     expect(ids.has("endless:focus_hours:10")).toBe(true);
+  });
+
+  it("aligns todayTime, history, monthly calendar, daily wins, and streaks to a 04:00 AM day cutoff", () => {
+    const at = (day: number, hour: number, minute = 0): number =>
+      new Date(2026, 10, day, hour, minute, 0, 0).getTime();
+
+    let state = sampleWorkspace(at(1, 10));
+    // Day 10: 2h during daytime (14:00–16:00) + 2h after midnight (Nov 11 01:00–03:00) = 4h on Nov 10
+    state = apply(
+      state,
+      {
+        type: "addSession",
+        id: "d10-afternoon",
+        nodeId: "read",
+        startedAt: at(10, 14),
+        durationMs: 2 * HOUR,
+      },
+      at(15, 12),
+    );
+    state = apply(
+      state,
+      {
+        type: "addSession",
+        id: "d10-late-night",
+        nodeId: "read",
+        startedAt: at(11, 1),
+        durationMs: 2 * HOUR,
+      },
+      at(15, 12),
+    );
+    // Session crossing 04:00 on Nov 12: 03:00–05:00 -> 1h on Nov 11, 1h on Nov 12
+    // Plus 3h on Nov 11 afternoon (15:00–18:00) = 4h total on Nov 11
+    state = apply(
+      state,
+      {
+        type: "addSession",
+        id: "d11-afternoon",
+        nodeId: "read",
+        startedAt: at(11, 15),
+        durationMs: 3 * HOUR,
+      },
+      at(15, 12),
+    );
+    state = apply(
+      state,
+      {
+        type: "addSession",
+        id: "d11-to-d12-cross",
+        nodeId: "read",
+        startedAt: at(12, 3),
+        durationMs: 2 * HOUR,
+      },
+      at(15, 12),
+    );
+    // Plus 3h on Nov 12 evening (20:00–23:00) = 4h total on Nov 12
+    state = apply(
+      state,
+      {
+        type: "addSession",
+        id: "d12-evening",
+        nodeId: "read",
+        startedAt: at(12, 20),
+        durationMs: 3 * HOUR,
+      },
+      at(15, 12),
+    );
+
+    // At 03:30 on Nov 11, it is still focus day 2026-11-10.
+    expect(focusDay(at(11, 3, 30))).toBe("2026-11-10");
+    expect(todayTime(state, at(11, 3, 30))).toBe(4 * HOUR);
+    const evalLateNight = evaluateAchievements(state, at(11, 3, 30));
+    expect(
+      evalLateNight.daily.find((d) => d.id === "daily:four_hours")?.current,
+    ).toBe(4 * HOUR);
+    expect(
+      evalLateNight.daily.find((d) => d.id === "daily:four_hours")?.completed,
+    ).toBe(true);
+
+    // At 04:00 on Nov 11, focus day rolls over to 2026-11-11.
+    expect(focusDay(at(11, 4, 0))).toBe("2026-11-11");
+    expect(todayTime(state, at(11, 4, 0))).toBe(0);
+
+    // History and monthly calendar both attribute 4h to Nov 10, 4h to Nov 11, 4h to Nov 12.
+    const boundaries = historyDays(
+      state.sessions,
+      "2026-11-10",
+      "2026-11-12",
+      at(15, 12),
+    );
+    const stats = historyStatistics(
+      state,
+      matchingSessionIndices(state.sessions, ""),
+      boundaries,
+    );
+    expect(stats.dailyMs).toEqual([4 * HOUR, 4 * HOUR, 4 * HOUR]);
+
+    const monthStats = historyStatistics(
+      state,
+      matchingSessionIndices(state.sessions, ""),
+      focusMonthDayBoundaries(2026, 10),
+    );
+    expect(monthStats.dailyMs.slice(9, 12)).toEqual([
+      4 * HOUR,
+      4 * HOUR,
+      4 * HOUR,
+    ]);
+
+    // Streaks see all three 4h+ days (Nov 10, 11, 12) and unlock Golden Run (4h x 3d).
+    const synced = syncAchievements(state, at(12, 23, 30), false);
+    const unlockedIds = new Set((synced.achievements ?? []).map((a) => a.id));
+    expect(unlockedIds.has("yellow_streak_3")).toBe(true);
+    expect(unlockedIds.has("three_in_a_row")).toBe(true);
+    expect(unlockedIds.has("night_owl")).toBe(true);
   });
 });

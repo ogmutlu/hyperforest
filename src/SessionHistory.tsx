@@ -2,7 +2,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { Action, State } from "./model";
 import { historyStatistics } from "./domainClient";
 import {
-  habitMonthDayBoundaries,
+  focusDay,
+  focusMonthDayBoundaries,
   historyDays,
   localDateTime,
   localDay,
@@ -32,13 +33,13 @@ function focusDayColor(ms: number): {
   text: string;
 } {
   if (ms <= 0) return { hoursText: "—", color: "#A4A9B3", text: "#0b1017" };
-  const hours = Math.round((ms / 3600000) * 10) / 10;
-  const hoursText = hours.toFixed(1);
-  if (hours < 2.0) return { hoursText, color: "#DC0C00", text: "#ffffff" };
-  if (hours < 4.0) return { hoursText, color: "#ED7E07", text: "#0b1017" };
-  if (hours < 5.0) return { hoursText, color: "#D9AF00", text: "#0b1017" };
-  if (hours < 6.0) return { hoursText, color: "#00C424", text: "#0b1017" };
-  if (hours < 7.5) return { hoursText, color: "#00ADC4", text: "#0b1017" };
+  const exactHours = ms / 3600000;
+  const hoursText = (Math.floor(exactHours * 10) / 10).toFixed(1);
+  if (exactHours < 2.0) return { hoursText, color: "#DC0C00", text: "#ffffff" };
+  if (exactHours < 4.0) return { hoursText, color: "#ED7E07", text: "#0b1017" };
+  if (exactHours < 5.0) return { hoursText, color: "#D9AF00", text: "#0b1017" };
+  if (exactHours < 6.0) return { hoursText, color: "#00C424", text: "#0b1017" };
+  if (exactHours < 7.5) return { hoursText, color: "#00ADC4", text: "#0b1017" };
   return { hoursText, color: "#374DF5", text: "#ffffff" };
 }
 
@@ -56,12 +57,12 @@ function FocusMonthCalendar({
   const year = month.getFullYear();
   const monthIndex = month.getMonth();
   const dailyMs = useMemo(() => {
-    const boundaries = habitMonthDayBoundaries(year, monthIndex);
+    const boundaries = focusMonthDayBoundaries(year, monthIndex);
     const indices = matchingSessionIndices(state.sessions, subject);
     return historyStatistics(state, indices, boundaries).dailyMs;
   }, [state, subject, year, monthIndex]);
   const offset = (month.getDay() + 6) % 7;
-  const todayKey = localDay(Date.now());
+  const todayKey = focusDay(Date.now());
 
   return (
     <section
@@ -185,7 +186,8 @@ export function SessionHistory({
   const [manualSeconds, setManualSeconds] = useState("0");
   const [deletingSession, setDeletingSession] = useState<string | null>(null);
   const [page, setPage] = useState(0);
-  const today = localDay(Date.now());
+  const today = focusDay(Date.now());
+  const calendarToday = localDay(Date.now());
   const result = useMemo(() => {
     try {
       const boundaries = historyDays(
@@ -340,8 +342,8 @@ export function SessionHistory({
             </dl>
             <p className="history-explanation">
               {localDay(boundaries[0]!)} – {localDay(boundaries.at(-2)!)} ·
-              Focus is clipped to this range. Daily average includes zero-focus
-              days. Unsaved sessions are excluded.
+              Focus is clipped to this range (days run 04:00–04:00). Daily
+              average includes zero-focus days. Unsaved sessions are excluded.
             </p>
           </>
         )}
@@ -396,7 +398,7 @@ export function SessionHistory({
               <DateField
                 label="Session start date"
                 min="1970-01-01"
-                max={today}
+                max={calendarToday}
                 required
                 disabled={busy}
                 value={manualStart.split("T")[0] ?? ""}
@@ -414,13 +416,13 @@ export function SessionHistory({
                   disabled={busy}
                   value={manualStart.split("T")[1] ?? ""}
                   max={
-                    manualStart.split("T")[0] === today
+                    manualStart.split("T")[0] === calendarToday
                       ? localDateTime(Date.now()).slice(11)
                       : undefined
                   }
                   onChange={(event) =>
                     setManualStart(
-                      `${manualStart.split("T")[0] ?? today}T${event.target.value}`,
+                      `${manualStart.split("T")[0] ?? calendarToday}T${event.target.value}`,
                     )
                   }
                 />

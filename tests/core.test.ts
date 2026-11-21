@@ -989,32 +989,32 @@ it("preserves finished vertices across reloads", () => {
   ).toBe(2000);
 });
 
-it("today counters exclude previous days and pauses, and split focus at local midnight", () => {
-  const midnight = new Date(2026, 9, 7).getTime();
+it("today counters exclude previous days and pauses, and split focus at local 04:00", () => {
+  const cutoff = new Date(2026, 9, 7, 4, 0, 0, 0).getTime();
   let state = apply(
     empty(),
     { type: "create", id: "root", title: "Work" },
-    midnight - 86400000,
+    cutoff - 86400000,
   );
-  state = apply(state, { type: "start", id: "root" }, midnight - 10000);
-  state = apply(state, { type: "pause" }, midnight - 5000);
-  state = apply(state, { type: "start", id: "root" }, midnight + 2000);
-  expect(todayTotals(state, "root", midnight + 7000).get("root")).toBe(5000);
-  state = apply(state, { type: "finish", id: "saved" }, midnight + 7000);
-  expect(todayTotals(state, "root", midnight + 9000).get("root")).toBe(5000);
-  expect(totals(state, "root", midnight + 9000).get("root")).toBe(10000);
+  state = apply(state, { type: "start", id: "root" }, cutoff - 10000);
+  state = apply(state, { type: "pause" }, cutoff - 5000);
+  state = apply(state, { type: "start", id: "root" }, cutoff + 2000);
+  expect(todayTotals(state, "root", cutoff + 7000).get("root")).toBe(5000);
+  state = apply(state, { type: "finish", id: "saved" }, cutoff + 7000);
+  expect(todayTotals(state, "root", cutoff + 9000).get("root")).toBe(5000);
+  expect(totals(state, "root", cutoff + 9000).get("root")).toBe(10000);
   state = apply(
     state,
     { type: "start", id: "root" },
-    midnight + 86400000 - 2000,
+    cutoff + 86400000 - 2000,
   );
   expect(
-    todayTotals(state, "root", midnight + 86400000 + 3000).get("root"),
+    todayTotals(state, "root", cutoff + 86400000 + 3000).get("root"),
   ).toBe(3000);
 });
 
 it("global Today counts all subjects once, including linked focus and deleted subjects", () => {
-  const day = new Date(2026, 9, 7).getTime();
+  const day = new Date(2026, 9, 7, 4, 0, 0, 0).getTime();
   let state = apply(empty(), { type: "create", id: "a", title: "A" }, day);
   state = apply(state, { type: "create", id: "b", title: "B" }, day);
   state = apply(
@@ -1035,8 +1035,8 @@ it("global Today counts all subjects once, including linked focus and deleted su
   state = apply(state, { type: "start", id: "a" }, day + 7000);
   expect(todayTime(state, day + 9000)).toBe(6000);
 });
-it("history date and subject filters combine with inclusive local-day boundaries", () => {
-  const day = new Date(2026, 9, 7).getTime();
+it("history date and subject filters combine with inclusive 04:00–04:00 local-day boundaries", () => {
+  const day = new Date(2026, 9, 7, 4, 0, 0, 0).getTime();
   let state = apply(
     empty(),
     { type: "create", id: "a", title: "Research" },
@@ -1061,7 +1061,7 @@ it("history date and subject filters combine with inclusive local-day boundaries
 it("formats Today in h m s and edits history without disturbing focus", () => {
   expect(formatHms(3723000)).toBe("1h2m3s");
   expect(formatHms(0)).toBe("0h0m0s");
-  const day = new Date(2026, 9, 7).getTime();
+  const day = new Date(2026, 9, 7, 4, 0, 0, 0).getTime();
   let state = apply(
     empty(),
     { type: "create", id: "root", title: "Work" },

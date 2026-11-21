@@ -20,7 +20,65 @@ export function localDay(time: number): string {
   return localDateTime(time).slice(0, 10);
 }
 
+export const FOCUS_DAY_START_HOUR = 4;
+
+/** Start of the local focus day (04:00 local time) containing `time`. */
+export function focusDayStart(time: number): number {
+  const d = new Date(time);
+  const start = new Date(
+    d.getFullYear(),
+    d.getMonth(),
+    d.getDate() - (d.getHours() < FOCUS_DAY_START_HOUR ? 1 : 0),
+    FOCUS_DAY_START_HOUR,
+    0,
+    0,
+    0,
+  );
+  return Math.max(0, start.getTime());
+}
+
+/** Local focus day (`YYYY-MM-DD`, running 04:00–04:00 local time) containing `time`. */
+export function focusDay(time: number): string {
+  const d = new Date(time);
+  const shifted = new Date(
+    d.getFullYear(),
+    d.getMonth(),
+    d.getDate() - (d.getHours() < FOCUS_DAY_START_HOUR ? 1 : 0),
+    12,
+    0,
+    0,
+    0,
+  );
+  return localDay(shifted.getTime());
+}
+
+/** Monotonic local focus-day index (04:00–04:00; days since 1970-01-01). */
+export function focusDayIndex(time: number): number {
+  const d = new Date(time);
+  const dayOffset = d.getHours() < FOCUS_DAY_START_HOUR ? -1 : 0;
+  return Math.floor(
+    Date.UTC(d.getFullYear(), d.getMonth(), d.getDate() + dayOffset) / 86400000,
+  );
+}
+
+function focusDayStartForIndex(dayIndex: number): number {
+  const utc = new Date(dayIndex * 86400000);
+  return Math.max(
+    0,
+    new Date(
+      utc.getUTCFullYear(),
+      utc.getUTCMonth(),
+      utc.getUTCDate(),
+      FOCUS_DAY_START_HOUR,
+      0,
+      0,
+      0,
+    ).getTime(),
+  );
+}
+
 /** Blank endpoints mean first saved session through today, inclusive.
+ * Focus days run 04:00–04:00 local time.
  * Advance calendar dates rather than adding 24h: DST days can be 23 or 25h.
  */
 export function historyDays(
@@ -29,10 +87,10 @@ export function historyDays(
   to: string,
   now: number,
 ): number[] {
-  const today = localDay(now);
+  const today = focusDay(now);
   let first = today;
   for (const session of sessions) {
-    const day = localDay(session.startedAt);
+    const day = focusDay(session.startedAt);
     if (day < first) first = day;
   }
   const end = to || today;
@@ -43,14 +101,16 @@ export function historyDays(
     );
   if (start > end || start < "1970-01-01" || end > today)
     throw new Error("Choose a valid date range ending no later than today.");
-  const cursor = new Date(`${start}T00:00:00`);
-  const last = new Date(`${end}T00:00:00`);
+  const [sy, sm, sd] = start.split("-").map(Number) as [number, number, number];
+  const [ey, em, ed] = end.split("-").map(Number) as [number, number, number];
+  const cursor = new Date(sy, sm - 1, sd, FOCUS_DAY_START_HOUR, 0, 0, 0);
+  const last = new Date(ey, em - 1, ed, FOCUS_DAY_START_HOUR, 0, 0, 0);
   if (!Number.isFinite(cursor.getTime()) || !Number.isFinite(last.getTime()))
     throw new Error("Choose a valid date range.");
   const boundaries = [Math.max(0, cursor.getTime())];
   while (cursor <= last) {
     cursor.setDate(cursor.getDate() + 1);
-    boundaries.push(cursor.getTime());
+    boundaries.push(Math.max(0, cursor.getTime()));
   }
   return boundaries;
 }
@@ -109,6 +169,17 @@ export function habitMonthDayBoundaries(year: number, month: number): number[] {
   const result: number[] = [];
   for (let day = 1; day <= days + 1; day++) {
     const d = new Date(year, month, day, 0, 0, 0, 0);
+    result.push(Math.max(0, d.getTime()));
+  }
+  return result;
+}
+
+/** Local 04:00 boundaries covering every focus day of a given month (length = days + 1). */
+export function focusMonthDayBoundaries(year: number, month: number): number[] {
+  const days = new Date(year, month + 1, 0).getDate();
+  const result: number[] = [];
+  for (let day = 1; day <= days + 1; day++) {
+    const d = new Date(year, month, day, FOCUS_DAY_START_HOUR, 0, 0, 0);
     result.push(Math.max(0, d.getTime()));
   }
   return result;
@@ -188,25 +259,62 @@ export function achievementCalendarContext(
   state: State,
   now: number,
 ): AchievementCalendarContext {
-  const todayLocalDay = localDayIndex(now);
-  const sessions = state.sessions.map((session, sessionIndex) => {
-    const start = new Date(session.startedAt);
-    const end = new Date(session.endedAt);
-    const localDay = localDayIndex(session.startedAt);
-    const touchesNight = session.periods.some((p) =>
-      periodTouchesNight(p.start, p.end),
-    );
-    return {
-      sessionIndex,
-      localDay,
-      isoWeek: localIsoWeekIndex(localDay),
-      weekday: localWeekday(localDay),
-      startMinute: start.getHours() * 60 + start.getMinutes(),
-      endMinute: end.getHours() * 60 + end.getMinutes(),
-      touchesNight,
-      durationMs: session.durationMs,
-      endedAt: session.endedAt,
-    };
+  const todayLocalDay = focusDayIndex(now);
+  const sessions: AchievementCalendarContext["sessions"] = [];
+  state.sessions.forEach((session, sessionIndex) => {
+    const buckets = new Map<
+      number,
+      {
+        durationMs: number;
+        firstStart: number;
+        lastEnd: number;
+        touchesNight: boolean;
+      }
+    >();
+    for (const period of session.periods) {
+      let cursor = period.start;
+      let dayIdx = focusDayIndex(cursor);
+      while (cursor < period.end) {
+        const nextStart = focusDayStartForIndex(dayIdx + 1);
+        if (nextStart <= cursor) break;
+        const segEnd = Math.min(period.end, nextStart);
+        const segMs = segEnd - cursor;
+        if (segMs > 0) {
+          const existing = buckets.get(dayIdx);
+          const night = periodTouchesNight(cursor, segEnd);
+          if (existing) {
+            existing.durationMs += segMs;
+            if (cursor < existing.firstStart) existing.firstStart = cursor;
+            if (segEnd > existing.lastEnd) existing.lastEnd = segEnd;
+            if (night) existing.touchesNight = true;
+          } else {
+            buckets.set(dayIdx, {
+              durationMs: segMs,
+              firstStart: cursor,
+              lastEnd: segEnd,
+              touchesNight: night,
+            });
+          }
+        }
+        cursor = segEnd;
+        dayIdx += 1;
+      }
+    }
+    for (const [dayIdx, bucket] of buckets) {
+      const start = new Date(bucket.firstStart);
+      const end = new Date(bucket.lastEnd);
+      sessions.push({
+        sessionIndex,
+        localDay: dayIdx,
+        isoWeek: localIsoWeekIndex(dayIdx),
+        weekday: localWeekday(dayIdx),
+        startMinute: start.getHours() * 60 + start.getMinutes(),
+        endMinute: end.getHours() * 60 + end.getMinutes(),
+        touchesNight: bucket.touchesNight,
+        durationMs: bucket.durationMs,
+        endedAt: bucket.lastEnd,
+      });
+    }
   });
 
   const [todayStart, todayEnd] = habitPeriodBounds("day", now);
@@ -248,7 +356,7 @@ export function achievementCalendarContext(
   const finishedCounts = new Map<number, number>();
   for (const node of state.nodes) {
     if (node.finishedAt !== undefined) {
-      const day = localDayIndex(node.finishedAt);
+      const day = focusDayIndex(node.finishedAt);
       finishedCounts.set(day, (finishedCounts.get(day) ?? 0) + 1);
     }
   }

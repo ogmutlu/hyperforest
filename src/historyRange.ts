@@ -1,5 +1,5 @@
 /** Local interface preference; never part of workspace YAML or domain state. */
-import { localDay, parseDay } from "./calendar";
+import { focusDay, parseDay } from "./calendar";
 
 export interface HistoryRange {
   from: string;
@@ -8,7 +8,7 @@ export interface HistoryRange {
 const KEY = "hyperforest.history-range";
 
 function valid(range: HistoryRange): boolean {
-  const today = localDay(Date.now());
+  const today = focusDay(Date.now());
   const endpoint = (value: string): boolean =>
     value === "" ||
     (!!parseDay(value) && value >= "1970-01-01" && value <= today);

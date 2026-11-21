@@ -21,7 +21,7 @@ import {
   saveAchievementPrefs,
   saveSeenDailyWins,
 } from "./achievementPrefs";
-import { localDay } from "./calendar";
+import { focusDay } from "./calendar";
 import {
   defaultVertex,
   thoughtText,
@@ -438,7 +438,7 @@ export function App({
     previousUnlockedIds.current = currentIds;
     if (suppressNextAchievementToast.current) {
       suppressNextAchievementToast.current = false;
-      const dayKey = localDay(Date.now());
+      const dayKey = focusDay(Date.now());
       const seen = loadSeenDailyWins(dayKey);
       for (const win of achievementEvaluation.daily) {
         if (win.completed) seen.add(win.id);
@@ -472,7 +472,7 @@ export function App({
           item.endless,
       });
     }
-    const dayKey = localDay(Date.now());
+    const dayKey = focusDay(Date.now());
     const seenDaily = loadSeenDailyWins(dayKey);
     let dailyChanged = false;
     for (const win of achievementEvaluation.daily) {

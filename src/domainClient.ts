@@ -1,6 +1,10 @@
 /** Thin adapter to the Rust domain. No business rules are implemented here. */
 import init, { Domain, focus_elapsed } from "./generated/hyperforest_bridge";
-import { achievementCalendarContext, localDayIndex } from "./calendar";
+import {
+  achievementCalendarContext,
+  focusDayIndex,
+  focusDayStart,
+} from "./calendar";
 import type {
   AchievementEvaluation,
   Action,
@@ -99,20 +103,15 @@ export function totals(
 ): Map<string, number> {
   return treeTotals(state, treeId, now, -1);
 }
-function midnight(now: number): number {
-  const day = new Date(now);
-  day.setHours(0, 0, 0, 0);
-  return day.getTime();
-}
 export function todayTotals(
   state: State,
   treeId: string,
   now: number,
 ): Map<string, number> {
-  return treeTotals(state, treeId, now, midnight(now));
+  return treeTotals(state, treeId, now, focusDayStart(now));
 }
 export function todayTime(state: State, now: number): number {
-  return domain(state).time_between(midnight(now), now);
+  return domain(state).time_between(focusDayStart(now), now);
 }
 
 export interface HistoryStatistics {
@@ -166,7 +165,7 @@ export function evaluateAchievements(
   state: State,
   now: number,
 ): AchievementEvaluation {
-  const day = localDayIndex(now);
+  const day = focusDayIndex(now);
   const cached = achievementCache.get(state);
   if (cached && cached.day === day) return cached.value;
   const ctx = achievementCalendarContext(state, now);
