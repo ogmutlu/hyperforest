@@ -1003,14 +1003,10 @@ it("today counters exclude previous days and pauses, and split focus at local 04
   state = apply(state, { type: "finish", id: "saved" }, cutoff + 7000);
   expect(todayTotals(state, "root", cutoff + 9000).get("root")).toBe(5000);
   expect(totals(state, "root", cutoff + 9000).get("root")).toBe(10000);
-  state = apply(
-    state,
-    { type: "start", id: "root" },
-    cutoff + 86400000 - 2000,
+  state = apply(state, { type: "start", id: "root" }, cutoff + 86400000 - 2000);
+  expect(todayTotals(state, "root", cutoff + 86400000 + 3000).get("root")).toBe(
+    3000,
   );
-  expect(
-    todayTotals(state, "root", cutoff + 86400000 + 3000).get("root"),
-  ).toBe(3000);
 });
 
 it("global Today counts all subjects once, including linked focus and deleted subjects", () => {
