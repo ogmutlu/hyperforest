@@ -3,7 +3,37 @@ import type { AchievementTier } from "./model";
 
 export type ChimeKind = AchievementTier | "daily" | "summary";
 
+const IDLE_CLOSE_MS = 400;
+
 let audioContext: AudioContext | null = null;
+let activeChimes = 0;
+let idleCloseTimer: ReturnType<typeof setTimeout> | null = null;
+
+function clearIdleCloseTimer(): void {
+  if (idleCloseTimer !== null) {
+    clearTimeout(idleCloseTimer);
+    idleCloseTimer = null;
+  }
+}
+
+function closeContextNow(ctx: AudioContext): void {
+  if (audioContext === ctx) {
+    audioContext = null;
+  }
+  if (ctx.state !== "closed") {
+    void ctx.close().catch(() => {});
+  }
+}
+
+function scheduleIdleClose(ctx: AudioContext): void {
+  clearIdleCloseTimer();
+  idleCloseTimer = setTimeout(() => {
+    idleCloseTimer = null;
+    if (activeChimes === 0 && audioContext === ctx) {
+      closeContextNow(ctx);
+    }
+  }, IDLE_CLOSE_MS);
+}
 
 function getContext(): AudioContext | null {
   if (typeof window === "undefined") return null;
@@ -12,15 +42,12 @@ function getContext(): AudioContext | null {
     (window as unknown as { webkitAudioContext?: typeof AudioContext })
       .webkitAudioContext;
   if (!Ctor) return null;
-  if (!audioContext) {
+  if (!audioContext || audioContext.state === "closed") {
     try {
       audioContext = new Ctor();
     } catch {
       return null;
     }
-  }
-  if (audioContext.state === "suspended") {
-    void audioContext.resume().catch(() => {});
   }
   return audioContext;
 }
@@ -170,10 +197,24 @@ const CHIMES: Record<ChimeKind, ToneSpec[]> = {
   ],
 };
 
-export function playAchievementChime(kind: ChimeKind, comboIndex = 0): void {
+async function playChimeAsync(
+  kind: ChimeKind,
+  comboIndex: number,
+): Promise<void> {
+  clearIdleCloseTimer();
   const ctx = getContext();
   if (!ctx) return;
+
+  activeChimes += 1;
+  let scheduled = false;
   try {
+    if (ctx.state === "suspended") {
+      await ctx.resume();
+    }
+    if (ctx.state !== "running") {
+      return;
+    }
+
     const start = ctx.currentTime + 0.01;
     // Slight ascending pitch climb for back-to-back combo unlocks (+1 semitone per step, max +4).
     const pitchScale = Math.pow(2, Math.min(Math.max(0, comboIndex), 4) / 12);
@@ -185,6 +226,10 @@ export function playAchievementChime(kind: ChimeKind, comboIndex = 0): void {
     );
     filter.Q.setValueAtTime(0.7, start);
     filter.connect(ctx.destination);
+
+    const nodes: AudioNode[] = [filter];
+    let lastOsc: OscillatorNode | null = null;
+    let maxEndOffset = 0;
 
     for (const note of CHIMES[kind]) {
       const osc = ctx.createOscillator();
@@ -205,10 +250,58 @@ export function playAchievementChime(kind: ChimeKind, comboIndex = 0): void {
       );
       osc.connect(env);
       env.connect(filter);
+      const endOffset = note.delay + note.dur + 0.03;
       osc.start(start + note.delay);
-      osc.stop(start + note.delay + note.dur + 0.03);
+      osc.stop(start + endOffset);
+      nodes.push(osc, env);
+      if (endOffset >= maxEndOffset) {
+        maxEndOffset = endOffset;
+        lastOsc = osc;
+      }
     }
+
+    let cleaned = false;
+    let fallbackTimer: ReturnType<typeof setTimeout> | null = null;
+    const cleanup = (): void => {
+      if (cleaned) return;
+      cleaned = true;
+      if (fallbackTimer !== null) {
+        clearTimeout(fallbackTimer);
+        fallbackTimer = null;
+      }
+      for (const node of nodes) {
+        try {
+          node.disconnect();
+        } catch {
+          /* Node may already be disconnected. */
+        }
+      }
+      activeChimes = Math.max(0, activeChimes - 1);
+      if (activeChimes === 0) {
+        scheduleIdleClose(ctx);
+      }
+    };
+
+    scheduled = true;
+    if (lastOsc) {
+      lastOsc.onended = cleanup;
+    }
+    fallbackTimer = setTimeout(
+      cleanup,
+      Math.ceil((maxEndOffset + 0.15) * 1000),
+    );
   } catch {
     /* Audio playback may be blocked in headless or restricted contexts. */
+  } finally {
+    if (!scheduled) {
+      activeChimes = Math.max(0, activeChimes - 1);
+      if (activeChimes === 0) {
+        closeContextNow(ctx);
+      }
+    }
   }
+}
+
+export function playAchievementChime(kind: ChimeKind, comboIndex = 0): void {
+  void playChimeAsync(kind, comboIndex);
 }
